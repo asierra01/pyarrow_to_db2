@@ -11,5 +11,5 @@ python3 setup.py build
 cd ..
 python3 hello_parquet.py
 ```
-
+hello_parquet.ini contains the connect to db2 credentilas.
 
