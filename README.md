@@ -18,3 +18,24 @@ python3 hello_parquet.py
 ```
 hello_parquet.ini contains the connect to db2 credentials.
 
+The function to focus is spclient_python.arrow_table_to_db2 below is the docstring.
+
+```
+arrow_table_to_db2 (conn, log_result, log, table, tablespace_name, schema_name, table_name, column_oriented)
+
+    Parameters
+    ----------
+    conn             : :class:`ibm_db.IBM_DBConnection` connection object
+    log_result       : :obj:`str` log result filename
+    DataBufferSize   : :obj:`int  data buffer size`, this could be zero
+    Savecount        : :obj:`int` save count, this could be zero
+    ChunkSize        : :obj:`int` chunk size
+    log              : :func:`log.info` logging info function
+    table            : :class:`pyarrow.lib.Table` pyarrow table object
+    tablespace_name  : :obj:`str` Table space name
+    schema_name      : :obj:`str` Schema name
+    table_name       : :obj:`str` Table name
+    column_oriented  : :obj:`bool` True or False column oriented table ?
+    drop_table       : :obj:`bool` True or False drop the table before inserting ?
+```
+
