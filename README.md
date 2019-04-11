@@ -21,7 +21,7 @@ hello_parquet.ini contains the connect to db2 credentials.
 The function to focus is spclient_python.arrow_table_to_db2 below is the docstring.
 
 ```
-arrow_table_to_db2 (conn, log_result, log, table, tablespace_name, schema_name, table_name, column_oriented)
+arrow_table_to_db2 (conn, log_result, DataBufferSize, Savecount, ChunkSize, log, table, tablespace_name, schema_name, table_name, column_oriented, drop_table)
 
     Parameters
     ----------
