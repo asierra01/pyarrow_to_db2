@@ -16,7 +16,7 @@ make
 cd ..
 python3 hello_parquet.py
 ```
-hello_parquet.ini contains the connect to db2 credentials.
+hello_parquet.ini contains the connection credentials.
 
 The function to focus is spclient_python.arrow_table_to_db2 below is the docstring.
 
