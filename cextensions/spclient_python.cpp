@@ -8,12 +8,10 @@ PYOBJ_PTR mylog_info = Py_None;
 PYOBJ_PTR SpClientError = NULL; // Creating a new exception
 
 
-
-void print_mylog_info_format(const char * format, ...)
+void print_mylog_info_format(const char* format, ...)
 {
     va_list args;
-    PYOBJ_PTR res = 0;
-    char buffer_log[100000] = {0};
+    char buffer_log[100000] = { 0 };
     va_start(args, format);
     vsnprintf(buffer_log, 100000, format, args);
     if (mylog_info != Py_None)
@@ -21,32 +19,31 @@ void print_mylog_info_format(const char * format, ...)
         py11::function mylog = py11::reinterpret_borrow<py11::function>(mylog_info);
         try
         {
-            mylog(py11::str(buffer_log));
+            py11::str py_str(buffer_log);
+            mylog(py_str);
         }
         catch (py11::error_already_set & e)
         {
-            printf("print_mylog_info %s %s", e.what(), buffer_log);
-            return;
+            LOG_INFO("error_already_set '%s' '%s'", e.what(), buffer_log);
         }
-        //res = PyObject_CallFunction(mylog_info, str_format, buffer_log); // New reference.
-        //Py_XDECREF(res);
     }
     va_end(args);
 
 }
 
-void print_mylog_info(const char * buffer_log)
+void print_mylog_info(const char* buffer_log)
 {
     if (mylog_info != Py_None)
     {
         py11::function mylog = py11::reinterpret_borrow<py11::function>(mylog_info);
         try
         {
-            mylog(py11::reinterpret_borrow<py11::str>(py11::str(buffer_log)));
+            py11::str py_str(buffer_log);
+            mylog(py_str);
         }
         catch (py11::error_already_set & e)
         {
-            printf("error_already_set print_mylog_info '%s' '%s'\n", e.what(), buffer_log);
+            LOG_INFO("error_already_set '%s' '%s'\n", e.what(), buffer_log);
             return;
         }
     }
@@ -68,12 +65,13 @@ run_the_test_cli(argobj_henv.p,
 
 string arrow_table_to_db2_docstring = R"(
 
-arrow_table_to_db2 (conn, log_result, log, table, tablespace_name, schema_name, table_name, column_oriented)
+arrow_table_to_db2 (conn, MessageFile, TempFilesPath, DataBufferSize, Savecount, ChunkSize, log, table, tablespace_name, schema_name, table_name, column_oriented, drop_table
 
     Parameters
     ----------
     conn             : :class:`ibm_db.IBM_DBConnection` connection object
-    log_result       : :obj:`str` log result filename
+    MessageFile      : :obj:`str` load result MessageFile filename
+    TempFilesPath    : :obj:`str` TempFilesPath
     DataBufferSize   : :obj:`int  data buffer size`, this could be zero
     Savecount        : :obj:`int` save count, this could be zero
     ChunkSize        : :obj:`int` chunk size
@@ -121,16 +119,16 @@ run the sample code tbload.c (ibm_db.IBM_DBConnection, mylog.info)
 
 
 /*  define functions in module */
-static PyMethodDef spclient_python_Methods[] =
+PyMethodDef spclient_python_Methods[] =
 {
      //{"run_the_test_cli", (PyCFunction)python_run_the_test_cli, METH_VARARGS,
      //run_the_test_cli_docstring.c_str()},
 
      //{"run_the_test", (PyCFunction)python_run_the_test, METH_VARARGS,
-     // "run_the_test(ibm_db.IBM_DBConnection, mylog.info)"},
+      //"run_the_test(ibm_db.IBM_DBConnection, mylog.info)"},
 
-    // {"run_the_test_only_windows", (PyCFunction)python_run_the_test_only_windows, METH_VARARGS,
-    //  "run_the_test_only_windows(byref(henv), byref(hdbc), mylog.info)"},
+     //{"run_the_test_only_windows", (PyCFunction)python_run_the_test_only_windows, METH_VARARGS,
+     // "run_the_test_only_windows(byref(henv), byref(hdbc), mylog.info)"},
 
      //{"send_file", (PyCFunction)python_send_file, METH_VARARGS,
      // "send_file(ibm_db.IBM_DBConnection, mylog.info)"},
@@ -138,29 +136,32 @@ static PyMethodDef spclient_python_Methods[] =
      {"describe_parameters", (PyCFunction)python_describe_parameters, METH_VARARGS,
       "describe_parameters(ibm_db.IBM_DBStatement)"},
 
-    // {"describe_parameters_by_cli", (PyCFunction)python_describe_parameters_by_cli, METH_VARARGS,
-    //  "describe_parameters(argobj_hdbc.p, argobj_stmt.p)"},
+     //{"describe_parameters_by_cli", (PyCFunction)python_describe_parameters_by_cli, METH_VARARGS,
+     // "describe_parameters_by_cli(argobj_hdbc.p, argobj_stmt.p, mylog.info)"},
 
      {"describe_columns", (PyCFunction)python_describe_columns, METH_VARARGS,
-      "hello this is my  python_describe_columns(ibm_db.IBM_DBStatement)"},
+      "python_describe_columns(ibm_db.IBM_DBStatement)"},
 
-    // {"describe_columns_by_cli", (PyCFunction)python_describe_columns_by_cli, METH_VARARGS,
-    //  "hello this is my  python_describe_columns_by_cli(ctypes.c_void_p, ctypes.c_void_p)"},
+     //{"describe_columns_by_cli", (PyCFunction)python_describe_columns_by_cli, METH_VARARGS,
+     // "python_describe_columns_by_cli(ctypes.c_void_p, ctypes.c_void_p)"},
 
-    // {"sqlextendedstoreproc", (PyCFunction)python_sqlextendedstoreproc, METH_VARARGS,
-    //  "sqlextendedstoreproc(ibm_db.IBM_DBConnection, mylog.info)) doc"},
+     //{"sqlextendedstoreproc", (PyCFunction)python_sqlextendedstoreproc, METH_VARARGS,
+     // "sqlextendedstoreproc(ibm_db.IBM_DBConnection, mylog.info)) doc"},
 
      {"call_get_db_size", (PyCFunction)python_call_get_db_size, METH_VARARGS,
       "call_get_db_size(ibm_db.IBM_DBConnection, mylog.info)"},
 
+     //{"call_get_db_size_with_timestamp", (PyCFunction)python_call_get_db_size_with_timestamp, METH_VARARGS,
+     // "call_get_db_size(ibm_db.IBM_DBConnection, mylog.info, DB2_TIMESTAMP)"},
+
      {"create_dummy_exception", (PyCFunction)python_create_dummy_exception, METH_VARARGS,
       "create_dummy_exception('whatever')"},
 
-    // {"get_stmt_handle",  (PyCFunction)python_get_stmt_handle, METH_VARARGS,
-    //  "get_stmt_handle (ibm_db.IBM_DBStatement, mylog.info) doc, gets SQLHANDLE stmt from ibm_db.IBM_DBStatement"},
+     //{"get_stmt_handle",  (PyCFunction)python_get_stmt_handle, METH_VARARGS,
+     // "get_stmt_handle (ibm_db.IBM_DBStatement, mylog.info) doc, gets SQLHANDLE stmt from ibm_db.IBM_DBStatement"},
 
-    // {"get_hdbc_handle",  (PyCFunction)python_get_hdbc_handle, METH_VARARGS,
-    //  "get_hdbc_handle(ibm_db.IBM_DBStatement, mylog.info) doc, gets SQLHANDLE hdbc from ibm_db.IBM_DBStatement"},
+     //{"get_hdbc_handle",  (PyCFunction)python_get_hdbc_handle, METH_VARARGS,
+     // "get_hdbc_handle(ibm_db.IBM_DBStatement, mylog.info) doc, gets SQLHANDLE hdbc from ibm_db.IBM_DBStatement"},
 
      {"arrow_table_to_db2",  (PyCFunction)python_arrow_table_to_db2, METH_VARARGS,
       arrow_table_to_db2_docstring.c_str()},
@@ -175,7 +176,7 @@ static PyMethodDef spclient_python_Methods[] =
      // "extract_array (ibm_db.IBM_DBConnection, mylog.info) "},
 
      //{"extract_array_one_big_csv",  (PyCFunction)python_extract_array_one_big_csv, METH_VARARGS,
-     // "hello this is extract_array_one_big_csv (ibm_db.IBM_DBConnection, mylog.info) doc, "},
+     // "extract_array_one_big_csv (ibm_db.IBM_DBConnection, mylog.info) doc, "},
 
      //{"extract_array_into_python",  (PyCFunction)python_extract_array_into_python, METH_VARARGS,
      // "extract_array_into_python (ibm_db.IBM_DBConnection, mylog.info)"},
@@ -196,12 +197,13 @@ static struct PyModuleDef ccos_module_np =
 
 PyMODINIT_FUNC PyInit_spclient_python(void) //python 3
 {
-    PyObject *m;
+    PyObject* m;
     int ret = 0;
     m = PyModule_Create(&ccos_module_np); // Return value: New reference.
     SpClientError = PyErr_NewException("spclient_python.Error", NULL, NULL); //Return value: New reference.
     // I am creating a new exception
-    //Py_INCREF(SpClientError); I dont think I need to increment the ref as PyErr_NewException already return a new ref
+    //Py_INCREF(SpClientError); 
+    //I dont think I need to increment the ref as PyErr_NewException already return a new ref
     ret = PyModule_AddObject(m, "Error", SpClientError);
     // ret = -1 on error ret = 0 on success
 
@@ -211,7 +213,7 @@ PyMODINIT_FUNC PyInit_spclient_python(void) //python 3
 
 PyMODINIT_FUNC initspclient_python(void) //python 2.7
 {
-    PyObject *m;
+    PyObject* m;
     int ret = 0;
 
     m = Py_InitModule("spclient_python", spclient_python_Methods); // Return value: Borrowed reference.

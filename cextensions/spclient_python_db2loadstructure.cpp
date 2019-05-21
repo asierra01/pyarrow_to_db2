@@ -4,14 +4,14 @@
 #include "arrow_table_to_db2.h"
 
 
-my_db2load_struct::my_db2load_struct(
+db2load_struct::db2load_struct(
         db2LoadOut *LoadOut,
         db2Uint64 iRowcount,
         db2Uint32 iSavecount,
         db2Uint32 iDataBufferSize,
-        const char * MESSAGE_FILE)
+        const char * MessageFile,
+        const char * TempFilesPath)
 {
-    //LOG_INFO("here");
     memset(LoadOut, 0, sizeof(db2LoadOut));
     pLoadOut = LoadOut;
     this->pLoadIn = (db2LoadIn *)malloc(sizeof(db2LoadIn));
@@ -26,18 +26,28 @@ my_db2load_struct::my_db2load_struct(
     if (this->pLoadStruct == NULL)
     {
         LOG_INFO("Error allocating pLoadStruct!");
+        return;
     }
 
     this->pDataDescriptor = (struct sqldcol *)malloc(sizeof(struct sqldcol));
     if (this->pDataDescriptor == NULL)
     {
         LOG_INFO("Error allocating pDataDescriptor!");
+        return;
+    }
+
+    this->pTempFilesPath = (char *)malloc(256);
+    if (this->pTempFilesPath == NULL)
+    {
+        LOG_INFO("Error allocating pTempFilesPath!");
+        return;
     }
 
     this->pMessageFile = (char *)malloc(256);
     if (this->pMessageFile == NULL)
     {
         LOG_INFO("Error allocating pMessageFile!");
+        return;
     }
 
     memset(this->pDataDescriptor, 0, sizeof(struct sqldcol));
@@ -45,15 +55,19 @@ my_db2load_struct::my_db2load_struct(
     memset(this->pLoadOut, 0, sizeof(db2LoadOut));
     memset(this->pLoadStruct, 0, sizeof(db2LoadStruct));
 
-    initialize_db2loadstructure(iRowcount, iSavecount, iDataBufferSize, MESSAGE_FILE);
-    //printf("%d %s done\n", __LINE__, __FUNCTION__);
+    initialize_db2loadstructure(iRowcount,
+                                iSavecount,
+                                iDataBufferSize,
+                                MessageFile,
+                                TempFilesPath);
 }
 
-int my_db2load_struct::initialize_db2loadstructure(
+int db2load_struct::initialize_db2loadstructure(
     db2Uint64 iRowcount,
     db2Uint32 iSavecount,
     db2Uint32 iDataBufferSize,
-    const char * MESSAGE_FILE)
+    const char * MessageFile,
+    const char * TempFilesPath)
 {
     /* Allocate load structures.
     NOTE that the memory belonging to the db2LoadStruct structure used
@@ -69,6 +83,20 @@ int my_db2load_struct::initialize_db2loadstructure(
     this->pLoadStruct->piDataDescriptor = this->pDataDescriptor;
     this->pLoadStruct->piFileTypeMod = NULL;
     this->pLoadStruct->piTempFilesPath = NULL;
+
+    if (TempFilesPath != nullptr)
+    {
+		if (strcmp(TempFilesPath, "") != 0)
+		{
+			LOG_INFO("MessageFile '%s' TempFilesPath != NULL '%s'",
+				this->pLoadStruct->piLocalMsgFileName,
+				this->pLoadStruct->piTempFilesPath);
+
+			sprintf(this->pTempFilesPath, "%s", TempFilesPath);
+			this->pLoadStruct->piTempFilesPath = this->pTempFilesPath;// NULL;
+		}
+    }
+
     this->pLoadStruct->piVendorSortWorkPaths = NULL;
     this->pLoadStruct->piCopyTargetList = NULL;
     this->pLoadStruct->piNullIndicators = NULL;
@@ -83,21 +111,27 @@ int my_db2load_struct::initialize_db2loadstructure(
     this->pLoadIn->iCpuParallelism = 0;//If the value of this parameter is zero, the load utility uses an intelligent default value at run time.
     this->pLoadIn->iDiskParallelism = 0;
     this->pLoadIn->iIndexingMode = 0;
-#ifdef WIN32
     this->pLoadIn->iDataBufferSize = iDataBufferSize; //If a value is not specified, an intelligent default is calculated by the utility at run time.
     //The default is based on a percentage of the free space available in the utility heap at the instantiation time
     //of the loader, as well as some characteristics of the table.
-#else
-	this->pLoadIn->iDataBufferSize = 0;
-#endif
-    sprintf(this->pMessageFile, "%s", MESSAGE_FILE);
-    this->pLoadStruct->piLocalMsgFileName = this->pMessageFile;
+
+    this->pLoadStruct->piLocalMsgFileName = NULL;
+
+    if (MessageFile != nullptr)
+    {
+		if (strcmp(MessageFile, "") != 0)
+		{
+			sprintf(this->pMessageFile, "%s", MessageFile);
+			this->pLoadStruct->piLocalMsgFileName = this->pMessageFile;
+		}
+    }
+
     this->pDataDescriptor->dcolmeth = SQL_METH_D;
     return 0;
 
 }
 
-my_db2load_struct::~my_db2load_struct()
+db2load_struct::~db2load_struct()
 {
     if (this->pLoadIn != NULL)
     {
@@ -121,6 +155,12 @@ my_db2load_struct::~my_db2load_struct()
     {
         free(this->pMessageFile);
         this->pMessageFile = NULL;
+    }
+
+    if (this->pTempFilesPath != NULL)
+    {
+        free(this->pTempFilesPath);
+        this->pTempFilesPath = NULL;
     }
     //printf("done %d %s()\n", __LINE__, __FUNCTION__);
 

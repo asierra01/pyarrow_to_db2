@@ -10,8 +10,6 @@ set(SPCLIENT_PYTHON_VERSION ${SPCLIENT_PYTHON_MAJOR}.${SPCLIENT_PYTHON_MINOR}.${
 
 message("Generating spclient_python") 
 
-
-
 if(DEFINED  ENV{DB2INCLUDE}) 
     include_directories("$ENV{DB2INCLUDE}")
     message(STATUS "ENV DB2INCLUDE                 : $ENV{DB2INCLUDE}" )
@@ -44,6 +42,7 @@ if (WIN32)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS -DSPCLIENT_PYTHON)
     find_library(DB2API_LIBRARY  db2api HINTS $ENV{DB2PATH}/lib)
 else()
+    add_definitions(-DSPCLIENT_PYTHON)
     find_library(DB2API_LIBRARY  db2 HINTS $ENV{DB2PATH}/lib)
 endif()
 
@@ -325,13 +324,18 @@ if(WIN32)
     endif()
 
     if (MSVC_TOOLSET_VERSION EQUAL 141)
-        set (PROJECT_NAME spclient_python_2017)
+        if (${CMAKE_GENERATOR} STREQUAL "Visual Studio 16 2019")
+            set (PROJECT_NAME spclient_python_2019)
+            message(STATUS "spclient_python_2019")
+        else()
+            message(STATUS "spclient_python_2017")
+            set (PROJECT_NAME spclient_python_2017)
+        endif()
     else()
         #message(STATUS "CMAKE_GENERATOR is not Visual Studio 15 2017 Win64")
     endif()
 
-
-    add_definitions( -D_CRT_SECURE_NO_WARNINGS -DNOMINMAX)  
+    add_definitions( -D_CRT_SECURE_NO_WARNINGS -DNOMINMAX)
 
     find_arrow_loc()
     find_pybind11_loc()

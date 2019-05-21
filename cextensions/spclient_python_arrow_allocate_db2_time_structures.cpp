@@ -63,7 +63,9 @@ std::string struct_arrow_to_db2_time::to_string() const
     return buffer;
 }
 
-void tm_toTIME(std::tm tm, ARROW_TO_DB2_TIME &t1)
+void tm_toTIME(
+    std::tm tm,
+    ARROW_TO_DB2_TIME &t1)
 {
     t1.year = tm.tm_year + 1900;
     t1.month = tm.tm_mon + 1;
@@ -72,9 +74,6 @@ void tm_toTIME(std::tm tm, ARROW_TO_DB2_TIME &t1)
     t1.hour = tm.tm_hour;
     t1.min = tm.tm_min;
     t1.sec = tm.tm_sec;
-
-
-
 }
 
 
@@ -127,39 +126,37 @@ void MY_DICT::TimeToTIME_STRUCT(
 
 void MY_DICT::fill_date32()
 {
-    VECT_ARROW_TO_DB2_TIME & TestTime = getTestTime();
-    size_t vector_size = TestTime.size();
+    VECT_ARROW_TO_DB2_TIME & v_Time = getVectorTime();
+    size_t vector_size = v_Time.size();
     m_data_time = (SQL_DATE_STRUCT *)calloc(vector_size, sizeof(SQL_DATE_STRUCT));
     size_t j = 0;
-    for (const ARROW_TO_DB2_TIME &item1 : TestTime)
+    for (const ARROW_TO_DB2_TIME &item1 : v_Time)
     {
         TimeToSQL_DATE_STRUCT(j, item1);
         j++;
-        //printf("fill_date32 '%s' %zd\n", item1.to_string().c_str(), vector_size);
     }
 }
 
 void MY_DICT::fill_date64()
 {
-    VECT_ARROW_TO_DB2_TIME & TestTime = getTestTime();
-    size_t vector_size = TestTime.size();
+    VECT_ARROW_TO_DB2_TIME & v_Time = getVectorTime();
+    size_t vector_size = v_Time.size();
     m_data_time = (SQL_DATE_STRUCT *)calloc(vector_size, sizeof(SQL_DATE_STRUCT));
     size_t j = 0;
-    for (const ARROW_TO_DB2_TIME &item1 : TestTime)
+    for (const ARROW_TO_DB2_TIME &item1 : v_Time)
     {
         TimeToSQL_DATE_STRUCT(j, item1);
         j++;
-        //printf("fill_date64 '%s' %zd\n", item1.to_string().c_str(), vector_size);
     }
 }
 
 void MY_DICT::fill_timestamp()
 {
-    VECT_ARROW_TO_DB2_TIME & TestTime = getTestTime();
-    size_t vector_size = TestTime.size();
+    VECT_ARROW_TO_DB2_TIME & v_Time = getVectorTime();
+    size_t vector_size = v_Time.size();
     m_data_time = (SQL_TIMESTAMP_STRUCT *)calloc(vector_size, sizeof(SQL_TIMESTAMP_STRUCT));
     size_t j = 0;
-    for (const ARROW_TO_DB2_TIME &item1 : TestTime)
+    for (const ARROW_TO_DB2_TIME &item1 : v_Time)
     {
         TimeToSQL_TIMESTAMP_STRUCT(j, item1);
         j++;
@@ -168,10 +165,10 @@ void MY_DICT::fill_timestamp()
 
 void MY_DICT::fill_time()
 {
-    size_t vector_size = getTestTime().size();
+    size_t vector_size = getVectorTime().size();
     m_data_time = (TIME_STRUCT *)calloc(vector_size, sizeof(TIME_STRUCT));
     size_t j = 0;
-    for (const ARROW_TO_DB2_TIME &item1 : getTestTime())
+    for (const ARROW_TO_DB2_TIME &item1 : getVectorTime())
     {
         TimeToTIME_STRUCT(j, item1);
         j++;

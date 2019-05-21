@@ -33,7 +33,7 @@ int boost_tokenize_and_run_sql(
     int rc = 0;
     bool log_create_table = false;
     const char* env_log_create = std::getenv("SPCLIENT_PYTHON_LOG_CREATE_TABLE");
-    if (env_log_create != NULL)
+    if (env_log_create != nullptr)
     {
         if (string(env_log_create) == "1")
             log_create_table = true;

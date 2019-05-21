@@ -8,11 +8,19 @@ using namespace py11::literals;
 void print_dir(py11::object _object)
 {
     std::string code = R"(
-def print_py(py
+def print_py(py):
     print(dir(py))
 )";
-    py11::exec(code.c_str());
-    py11::globals()["print_py"](_object);
+    try
+    {
+        py11::exec(code.c_str());
+        py11::globals()["print_py"](_object);
+    }
+    catch (py11::error_already_set & e)
+    {
+        LOG_INFO("error_already_set '%s'", e.what());
+        return;
+    }
 
 }
 
@@ -43,6 +51,25 @@ int  read_sql_file(char * sql_str)
 }
 */
 
+const char* __doc__(PyCFunction func)
+{
+    PyMethodDef* pymethod;
+    bool OK = true;
+    int i = 0;
+    while (OK == true)
+    {
+        pymethod = &spclient_python_Methods[i];
+        if (pymethod->ml_name == NULL)
+            OK = false;
+        else
+        {
+            if (spclient_python_Methods[i].ml_meth == func)
+                return spclient_python_Methods[i].ml_doc;
+        }
+        i++;
+    }
+    return NULL;
+}
 /* turn the CLI LOAD feature ON or OFF */
 int setCLILoadMode(
     SQLHANDLE hstmt,
@@ -54,7 +81,7 @@ int setCLILoadMode(
     SQLRETURN cliRC = SQL_SUCCESS;
     bool displgeneral_log = false;
     const char* env_general_log = std::getenv("SPCLIENT_PYTHON_LOG_GENERAL");
-    if (env_general_log != NULL)
+    if (env_general_log != nullptr)
     {
         if (string(env_general_log) == "1")
             displgeneral_log = true;
@@ -70,6 +97,17 @@ int setCLILoadMode(
 
     if (fStartLoad)
     {
+
+/*
+        
+   Use load values.
+
+SQL_USE_LOAD_OFF                  0
+SQL_USE_LOAD_INSERT               1
+SQL_USE_LOAD_REPLACE              2
+SQL_USE_LOAD_RESTART              3
+SQL_USE_LOAD_TERMINATE            4
+*/
         cliRC = SQLSetStmtAttr(hstmt,
                                SQL_ATTR_USE_LOAD_API,
                                (SQLPOINTER)SQL_USE_LOAD_INSERT,

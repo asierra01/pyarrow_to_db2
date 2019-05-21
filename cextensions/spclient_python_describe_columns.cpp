@@ -5,13 +5,12 @@
 using namespace py11::literals;
 using namespace std;
 
-//#define _DEBUG 1
 
 static int func_registered_set_table_describe_col = 0;
 
 void register_table_columns()
 {
-    string some_command_find_path = R"(
+    string set_table_col = R"(
 def set_table_describe_col():
     from texttable import Texttable
     table = Texttable()
@@ -43,7 +42,7 @@ def set_table_describe_col():
 
         try
         {
-            py11::exec(some_command_find_path.c_str());
+            py11::exec(set_table_col.c_str());
             func_registered_set_table_describe_col = 1;
         }
         catch (py11::error_already_set & e)
@@ -66,6 +65,8 @@ py11::object get_table_columns()
     try
     {
         py_set_table_describe_col = py11::globals()["set_table_describe_col"];
+        py_set_table_describe_col.inc_ref();
+        return py_set_table_describe_col();
     }
     catch (py11::error_already_set & e)
     {
@@ -81,6 +82,7 @@ py11::object get_table_columns()
         try
         { 
             py_set_table_describe_col = py11::globals()["set_table_describe_col"];
+            return py_set_table_describe_col();
         }
         catch (py11::error_already_set& e)
         {
@@ -90,16 +92,7 @@ py11::object get_table_columns()
         }
 
     }
-    try
-    {
-       return py_set_table_describe_col(); 
-    }
-    catch (py11::error_already_set& e)
-    {
-        LOG_INFO("py_set_table_describe_col  %s", e.what());
-        return py11::cast<py11::none>(Py_None);
-
-    }
+    return py11::cast<py11::none>(Py_None);
 }
 
 /*  wrapped python_describe_columns function consuming ibm_db.IBM_DBStatement */
@@ -121,7 +114,7 @@ PYOBJ_PTR python_describe_columns(
         &py_list_describe_cols))
     {
         PyErr_Format(PyExc_ValueError,
-                     "parameters count must be 3  ibm_db.IBM_DBStatement, '%s'", "yes 3 parameters");
+                     "parameters count must be 4 ibm_db.IBM_DBStatement, '%s'", "yes 4 parameters");
         return NULL;
     }
 
@@ -219,10 +212,11 @@ int display_columns(
     STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
     if (NumColumns == 0)
     {
-        LOG_INFO("NumColumns = 0\n");
+        LOG_INFO("NumColumns = 0");
         return 0;
     }
-    py_table = get_table_columns();
+    if (display)
+        py_table = get_table_columns();
 
     //LOG_INFO("py_table= %x  '%s'",  py_table.ptr(), Py_TYPE(py_table.ptr())->tp_name);
 
@@ -281,13 +275,15 @@ int display_columns(
                     pibScale,
                     "{:,}"_s.format(pcbColDef).ptr(),
                     pfNullable));
-                py_table.attr("add_row")(py11_my_row);
+
+                if (py_table.is_none() == false)
+                    py_table.attr("add_row")(py11_my_row);
             }
         }
     }
 
 
-    if (display)
+    if ((display) && (py_table.is_none() == false))
     {
         py11::list  py_table_width = py_table.attr("_width");
         py_table_width[1] = max_column_name_len + 2;

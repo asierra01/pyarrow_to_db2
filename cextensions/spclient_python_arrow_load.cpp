@@ -1,9 +1,10 @@
 
 #include "spclient_python_common_cpp.h"
 #include "arrow_table_to_db2.h"
+#include <sqlcodes.h>
 #include <chrono>
 #include <thread>
-//#define MESSAGE_FILE_ONE_BIG_CSV "log/cliloadmsg_one_big_csv.txt"
+
 #define TRUE 1
 #define FALSE 0
 
@@ -35,7 +36,6 @@ void log_mapfieldname_dict(
                 stringStreamlog << ", ";
         }
         stringStreamlog << std::endl;
-        //printf(stringStreamlog.str().c_str());
         LOG_INFO("i %d %s",
             i, 
             stringStreamlog.str().c_str());
@@ -93,37 +93,43 @@ int run_dynamic_prepare(
 {
     SQLRETURN cliRC = SQL_SUCCESS;
     int rc = 0;
+    bool log = false;
     const char* env_log_create = std::getenv("SPCLIENT_PYTHON_LOG_CREATE_TABLE");
-    if (env_log_create != NULL)
+    if (env_log_create != nullptr)
     {
         if (string(env_log_create) == "1")
-            LOG_INFO("\n%s\n", dynamic_insert.c_str());
+            log = true;
     }
+    if (log)
+        LOG_INFO("\n%s\n", dynamic_insert.c_str());
 
     cliRC = SQLPrepare(hstmt,
                       (SQLCHAR *)dynamic_insert.c_str(),
                       (SQLINTEGER)dynamic_insert.length());
 
     STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
+    if (log)
+        LOG_INFO("done");
     return cliRC;
 }
 
 
-int do_the_load_arrow_to_one_big_csv(
+int do_the_load_arrow(
     SQLHANDLE henv,
     SQLHANDLE hdbc,
     MAP_FIELDNAME_DICT &map_field_memory_vectors,
     const char  * tablespace_name,
     const char  * schema_name,
     const char  * table_name,
-    const char  * MESSAGE_FILE_ONE_BIG_CSV,
+    const char  * MessageFile,
+    const char  * TempFilesPath,
     db2Uint32   iDataBufferSize,
     db2Uint32   iSavecount,
     db2Uint32   iChunkSize,
-    bool         column_oriented,
-    bool         drop_table,
+    bool        column_oriented,
+    bool        drop_table,
     db2LoadOut  * pLoadOut,
-    int64_t      num_rows
+    int64_t     num_rows
 )
 {
     SQLRETURN cliRC = SQL_SUCCESS;
@@ -131,20 +137,21 @@ int do_the_load_arrow_to_one_big_csv(
     bool column_organyze_by = false;
     bool column_boolean = true;
     bool display_parameter = false;
-
+    LOG_INFO("MessageFile '%s' TempFilesPath '%s'", MessageFile, TempFilesPath);
     SQLHANDLE hstmt;
-    MY_DB2LOAD_STRUCTURE my_load(pLoadOut, 
+    DB2LOAD_STRUCTURE load(pLoadOut,
         num_rows,
-        iSavecount, 
-        iDataBufferSize, 
-        MESSAGE_FILE_ONE_BIG_CSV);
+        iSavecount,
+        iDataBufferSize,
+        MessageFile,
+        TempFilesPath);
 
     cliRC = SQLAllocHandle(SQL_HANDLE_STMT,
                            hdbc,
                            &hstmt);
     STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
     const char* env_log_rows = std::getenv("SPCLIENT_PYTHON_LOG_ROWS");
-    if (env_log_rows != NULL)
+    if (env_log_rows != nullptr)
     {
         if (string(env_log_rows) == "1")
         {
@@ -176,15 +183,15 @@ int do_the_load_arrow_to_one_big_csv(
     if (rc != SQL_SUCCESS)
         return rc;
  
-    bool display_columns = false;
-    const char* env_log_column = std::getenv("SPCLIENT_PYTHON_LOG_COLUMN");
-    if (env_log_column != NULL)
-    {
-        if (string(env_log_column) == "1")
-            display_columns = true;
-    }
+    //bool display_columns = false;
+    //const char* env_log_column = std::getenv("SPCLIENT_PYTHON_LOG_COLUMN");
+    //if (env_log_column != NULL)
+    //{
+    //    if (string(env_log_column) == "1")
+    //        display_columns = true;
+    //}
     const char* env_log_parameter = std::getenv("SPCLIENT_PYTHON_LOG_PARAMETER");
-    if (env_log_parameter != NULL)
+    if (env_log_parameter != nullptr)
     {
         if (string(env_log_parameter) == "1")
             display_parameter = true;
@@ -192,7 +199,7 @@ int do_the_load_arrow_to_one_big_csv(
 
     bool displgeneral_log = false;
     const char* env_general_log = std::getenv("SPCLIENT_PYTHON_LOG_GENERAL");
-    if (env_general_log != NULL)
+    if (env_general_log != nullptr)
     {
         if (string(env_general_log) == "1")
             displgeneral_log = true;
@@ -204,6 +211,8 @@ int do_the_load_arrow_to_one_big_csv(
                                      map_colno_sql_type,
                                      display_parameter);
 
+    if (displgeneral_log)
+        LOG_INFO("display_parameters_map %d", ret);
     if (ret != 0)
     {
         cliRC = SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
@@ -213,7 +222,7 @@ int do_the_load_arrow_to_one_big_csv(
     }
 
     if (iChunkSize == 0)
-        iChunkSize = 1000000;
+        iChunkSize = num_rows / 10;
 
     int64_t chunks_size;
     SQLULEN chunks_size_proccesed = 0;
@@ -242,13 +251,15 @@ int do_the_load_arrow_to_one_big_csv(
                            0);
     STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
 
-
+    if (displgeneral_log)
+        LOG_INFO("ready for bind_parameters_generic");
     /* bind the parameters */
     rc = bind_parameters_generic(
             hdbc,
             hstmt,
             num_rows,
             map_field_memory_vectors,
+            map_colno_sql_type,
             column_boolean);
 
     if (rc != 0)
@@ -263,13 +274,13 @@ int do_the_load_arrow_to_one_big_csv(
 
     }
     /* turn CLI LOAD ON */
-    rc = setCLILoadMode(hstmt, hdbc, TRUE, my_load.pLoadStruct);
+    rc = setCLILoadMode(hstmt, hdbc, TRUE, load.pLoadStruct);
     int64_t chunks_count = num_rows / chunks_size;
     std::string str_num_rows = "'{:,}'"_s.format(num_rows);
 
 
     if (displgeneral_log)
-        LOG_INFO(" Inserting %s rows.. ", str_num_rows.c_str());
+        LOG_INFO(" Inserting %s rows.. chunks_size %lld", str_num_rows.c_str(), chunks_size);
 
     int64_t total_inserted = 0;
     for (int64_t i = 0; i < chunks_count; i++)
@@ -288,11 +299,54 @@ int do_the_load_arrow_to_one_big_csv(
             rc = check_error(hdbc, hstmt, cliRC, __LINE__, __FUNCTION__);
         }
         else
+        {
             rc = 0;
+            //for (auto const& item : map_field_memory_vectors)
+           // {
+           //     if (item.second->vector_type == arrow::Type::DECIMAL)
+           //     {
+           //         for (int64_t j = 0; j < chunks_size; j++)
+           //         {
+           //             LOG_INFO(" sizes %d", item.second->m_str_lens[i]);
+           //         }
+           //     }
+           // }
+        }
 
         if (rc != 0)
         {
-            LOG_INFO("the load failed");
+            if (displgeneral_log)
+                LOG_INFO("the load failed, rc %d", rc);
+            SQLCHAR message[SQL_MAX_MESSAGE_LENGTH + 1];
+            SQLCHAR sqlstate[SQL_SQLSTATE_SIZE + 1];
+            SQLINTEGER sqlcode;
+            SQLSMALLINT length;
+
+            SQLGetDiagRec(SQL_HANDLE_STMT,
+                hstmt,
+                1,
+                sqlstate,
+                &sqlcode,
+                message,
+                SQL_MAX_MESSAGE_LENGTH + 1,
+                &length);
+            if (sqlcode != SQL_RC_E552)
+            //User doesnt have rights for a LOAD...aka LOAD was never started
+            {
+                rc = setCLILoadMode(hstmt, hdbc, FALSE, load.pLoadStruct);
+                if (rc != 0)
+                    LOG_INFO("setCLILoadMode %d", rc);
+            }
+            Py_BEGIN_ALLOW_THREADS;
+            cliRC = SQLEndTran(SQL_HANDLE_DBC, hdbc, SQL_ROLLBACK);
+            Py_END_ALLOW_THREADS;
+
+            if (cliRC != 0)
+                LOG_INFO("SQLEndTran %d", cliRC);
+
+            cliRC = SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
+            if (cliRC != 0)
+                LOG_INFO("SQLFreeHandle %d", cliRC);
             return rc;
         }
         else if (displgeneral_log)
@@ -309,7 +363,7 @@ int do_the_load_arrow_to_one_big_csv(
     }
     int64_t remaining = num_rows - total_inserted;
 
-    // do remainig amount
+    // do remaining amount
 
     if (remaining > 0)
     {
@@ -329,7 +383,7 @@ int do_the_load_arrow_to_one_big_csv(
     }
 
     /* turn CLI LOAD OFF */
-    rc = setCLILoadMode(hstmt, hdbc, FALSE, my_load.pLoadStruct);
+    rc = setCLILoadMode(hstmt, hdbc, FALSE, load.pLoadStruct);
 
     if (displgeneral_log)
         LOG_INFO("starting last SQL_COMMIT");
@@ -337,6 +391,7 @@ int do_the_load_arrow_to_one_big_csv(
     Py_BEGIN_ALLOW_THREADS;
     cliRC = SQLEndTran(SQL_HANDLE_DBC, hdbc, SQL_COMMIT);
     Py_END_ALLOW_THREADS;
+
     if (displgeneral_log)
         LOG_INFO("last SQL_COMMIT cliRC=%d", cliRC);
     rc = check_error(hdbc, hstmt, cliRC, __LINE__, __FUNCTION__);
@@ -346,7 +401,7 @@ int do_the_load_arrow_to_one_big_csv(
     STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
 
     if (displgeneral_log)
-        LOG_INFO("Load messages can be found in file [%s].", MESSAGE_FILE_ONE_BIG_CSV);
+        LOG_INFO("Load messages can be found in file [%s].", MessageFile);
     return 0;
 
 }

@@ -11,7 +11,7 @@ static int func_registered_set_table_describe_parameters = 0;
 
 void register_table_parameter()
 {
-    string some_command_find_path = R"(
+    string str_set_table_describe_parameters = R"(
 def set_table_describe_parameters():
     from texttable import Texttable
     table = Texttable()              
@@ -38,7 +38,11 @@ def set_table_describe_parameters():
         func_registered_set_table_describe_parameters = 1;
         try
         {
-            py11::exec(some_command_find_path.c_str());
+            py11::exec(str_set_table_describe_parameters.c_str());
+            //py11::object obj = py11::eval<py11::eval_mode::eval_statements>(str_set_table_describe_parameters.c_str());
+            //print_dir(obj);
+            //LOG_INFO("%s", Py_TYPE(obj.ptr())->tp_name); // NoneType
+            //obj.inc_ref();
         }
         catch (py11::error_already_set& e)
         {
@@ -60,6 +64,8 @@ py11::object get_table_parameters()
     try
     {
         py_set_table_describe_parameters = py11::globals()["set_table_describe_parameters"];
+        py_set_table_describe_parameters.inc_ref();
+        return py_set_table_describe_parameters();
     }
     catch (py11::error_already_set & e)
     {
@@ -75,6 +81,7 @@ py11::object get_table_parameters()
         try
         {
             py_set_table_describe_parameters = py11::globals()["set_table_describe_parameters"];
+            return py_set_table_describe_parameters();
         }
         catch (py11::error_already_set & e)
         {
@@ -82,18 +89,8 @@ py11::object get_table_parameters()
             return py11::cast<py11::none>(Py_None);
 
         }
-
     }
-    try
-    {
-        return py_set_table_describe_parameters();
-    }
-    catch (py11::error_already_set & e)
-    {
-        LOG_INFO("py_set_table_describe_parameters  %s", e.what());
-        return py11::cast<py11::none>(Py_None);
-
-    }
+    return py11::cast<py11::none>(Py_None);
 }
 /*  wrapped python_describe_parameters function consuming ibm_db.IBM_DBStatement */
 PYOBJ_PTR python_describe_parameters(PYOBJ_PTR self, PYOBJ_PTR args)
@@ -104,15 +101,16 @@ PYOBJ_PTR python_describe_parameters(PYOBJ_PTR self, PYOBJ_PTR args)
 
     if (!PyArg_ParseTuple(args, "OO", &py_stmt_res, &mylog_info))
     {
-        PyErr_Format(PyExc_ValueError, 
-            "parameters count must be 1  ibm_db.IBM_DBStatement, '%s'", 
-            "yes 1 parameters");
+        const char* current_func_doc = __doc__(python_describe_parameters);
+        PyErr_Format(PyExc_ValueError,
+                     "__doc__ '%s'\nparameters count must be 2  ibm_db.IBM_DBStatement, mylog.info",
+                     current_func_doc);
         return NULL;
     }
 
     if (NIL_P(py_stmt_res))
     {
-        PyErr_Format( PyExc_TypeError,
+        PyErr_Format(PyExc_TypeError,
                      "Supplied conn object Parameter is NULL  '%s' it should be ibm_db.IBM_DBStatement",
                      Py_TYPE(py_stmt_res)->tp_name );
         return NULL;
@@ -150,9 +148,10 @@ PYOBJ_PTR python_describe_parameters_by_cli(
 
     if (!PyArg_ParseTuple(args, "OOO", &py_hdbc, &py_stmt, &mylog_info))
     {
+        const char* current_func_doc = __doc__(python_describe_parameters_by_cli);
         PyErr_Format(PyExc_ValueError,
-            "parameters count must be 3, '%s'",
-            "yes 3 parameters");
+                     "__doc__ '%s'\n parameters count must be 3",
+                     current_func_doc);
         return NULL;
     }
 
@@ -350,8 +349,8 @@ int display_parameters_map(
                 pibScale,
                 "{:,}"_s.format(pcbColDef).ptr(),
                 pfNullable));
-            py_table.attr("add_row")(py11_my_row);
-            
+            if (py_table.is_none() == false)
+                py_table.attr("add_row")(py11_my_row);
         }
     }
 

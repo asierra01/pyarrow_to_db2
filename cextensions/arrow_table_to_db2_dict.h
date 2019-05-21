@@ -49,6 +49,7 @@ struct struct_arrow_to_db2_time
 
 typedef struct struct_arrow_to_db2_time ARROW_TO_DB2_TIME;
 
+//typedef std::vector<SQL_NUMERIC_STRUCT> VECT_DEC128;
 typedef std::vector<int64_t> VECT_64;
 typedef std::vector<uint64_t> VECT_U64;
 typedef std::vector<double> VECT_DOUBLE;
@@ -66,14 +67,16 @@ class MY_DICT
 {
 public:
     // this is only used when field is time ralated
-    // I need to convert arrow time related to these structures
-    // SQL_TIMESTAMP_STRUCT *,  SQL_DATE_STRUCT *, TIME_STRUCT *  
+    // I need to convert arrow time to these structures
+    // SQL_TIMESTAMP_STRUCT * or  SQL_DATE_STRUCT * or TIME_STRUCT *  
     SQLPOINTER m_data_time = nullptr;
-
 
     //std::vector<int64_t or int8_t or double or TEST_TIME>
     //depends on vector_type
     void* m_vector = NULL;
+
+    int ColDef;
+    int Scale;
 
     //experimental
     //std::shared_ptr< void > vector1
@@ -85,7 +88,7 @@ public:
     //this is used for string array or binary array
     std::vector<uint8_t> m_v_8_string;
 
-    // sizes of each string...db2/odbc SQLBindParameter needs these sizes 
+    // sizes of each string.or object being passed..db2/odbc SQLBindParameter needs these sizes 
     std::vector<SQLLEN>  m_str_lens;
 
     arrow::Type::type  vector_type = arrow::Type::type::NA;
@@ -93,7 +96,7 @@ public:
     string to_string(size_t i);
     size_t size1();//experimental
 
-
+    //VECT_DEC128& getVectorDec128();
     VECT_DOUBLE& getVectorDouble();
     VECT_64& getVector64();
     VECT_U64& getVectorU64();
@@ -104,7 +107,7 @@ public:
     VECT_U32& getVectorU32();
     VECT_16& getVector16();
     VECT_U16& getVectorU16();
-    VECT_ARROW_TO_DB2_TIME& getTestTime();
+    VECT_ARROW_TO_DB2_TIME& getVectorTime();
 
     void TimeToSQL_TIMESTAMP_STRUCT(size_t j, const ARROW_TO_DB2_TIME& item1);
     void TimeToSQL_DATE_STRUCT(size_t j, const ARROW_TO_DB2_TIME& item1);

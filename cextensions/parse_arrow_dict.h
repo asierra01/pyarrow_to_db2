@@ -64,6 +64,10 @@ void print_binary(
     COLUMN &c,
     MY_DICT *dict);
 
+void print_fixed_size_binary(
+    COLUMN& c,
+    MY_DICT* dict);
+
 void print_date64(
     COLUMN &c,
     MY_DICT *dict);
@@ -76,16 +80,25 @@ void print_float(
     COLUMN &c,
     MY_DICT *dict);
 
+void print_half_float(
+    COLUMN &c,
+    MY_DICT *dict);
+
+void print_decimal(
+    COLUMN& c,
+    MY_DICT* dict);
+
 void print_timestamp(
     COLUMN &c,
     MY_DICT *dict);
 
-
 void log_dic(
     MY_DICT &dict,
     COLUMN &c,
+    py11::object &py_table,
     int line,
     const char * func_name);
 
-void log_dic(MY_DICT &dict, COLUMN &c, int, const char *);
-#define LOG_DICT log_dic(*dict, c, __LINE__, __FUNCTION__)
+#define LOG_DICT log_dic(*dict, c, py_table, __LINE__, __FUNCTION__)
+
+py11::object get_table_dict();

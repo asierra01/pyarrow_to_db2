@@ -8,22 +8,19 @@ int check_parameters(
     PYOBJ_PTR py_conn_res,
     conn_handle * * conn_res,
     PYOBJ_PTR py_parquet_table,
-    TABLE       * parquet_table,
+    TABLE     * parquet_table,
     PYOBJ_PTR py_table_name,
     PYOBJ_PTR py_schema_name,
     PYOBJ_PTR py_tablespace_name,
     PYOBJ_PTR py_table_column_oriented,
     PYOBJ_PTR py_drop_table,
-    char * table_name,
-    char * schema_name,
-    char * tablespace_name,
-    bool& table_column_oriented,
-    bool& drop_table
+    char *    table_name,
+    char *    schema_name,
+    char *    tablespace_name,
+    bool&     table_column_oriented,
+    bool&     drop_table
 )
 {
-    PYOBJ_PTR py_str_table_name = NULL;
-    PYOBJ_PTR py_str_schema_name = NULL;
-    PYOBJ_PTR py_str_tablespace_name = NULL;
     if (py_conn_res == NULL)
     {
         PyErr_Format(PyExc_TypeError,
@@ -46,32 +43,20 @@ int check_parameters(
 
     if (py_table_name != Py_None)
     {
-#if PY_MAJOR_VERSION == 2
-        py_str_table_name = PyObject_Str(py_table_name); //Return value: New reference.
-#else
-        py_str_table_name = PyUnicode_AsEncodedString(py_table_name, "utf-8", "~E~"); //Return value: New reference.
-#endif
-        strcpy_s(table_name, 255, PyBytes_AS_STRING(py_str_table_name));
+        py11::str py_str_table_name = py11::reinterpret_borrow<py11::str>(py_table_name);
+        strcpy_s(table_name, 255, ((string) py_str_table_name).c_str());
     }
 
     if (py_schema_name != Py_None)
     {
-#if PY_MAJOR_VERSION == 2
-        py_str_schema_name = PyObject_Str(py_table_name); //Return value: New reference.
-#else
-        py_str_schema_name = PyUnicode_AsEncodedString(py_schema_name, "utf-8", "~E~"); //Return value: New reference.
-#endif
-        strcpy_s(schema_name, 255, PyBytes_AS_STRING(py_str_schema_name));
+        py11::str py_str_schema_name = py11::reinterpret_borrow<py11::str>(py_schema_name);
+        strcpy_s(schema_name, 255, ((string) py_str_schema_name).c_str());
     }
 
     if (py_tablespace_name != Py_None)
     {
-#if PY_MAJOR_VERSION == 2
-        py_str_schema_name = PyObject_Str(py_table_name); //Return value: New reference.
-#else
-        py_str_tablespace_name = PyUnicode_AsEncodedString(py_tablespace_name, "utf-8", "~E~"); //Return value: New reference.
-#endif
-        strcpy_s(tablespace_name, 255, PyBytes_AS_STRING(py_str_tablespace_name));
+        py11::str py_str_tablespace_name = py11::reinterpret_borrow<py11::str>(py_tablespace_name);
+        strcpy_s(tablespace_name, 255, ((string) py_str_tablespace_name).c_str());
     }
 
     if (py_table_column_oriented != Py_None)
@@ -110,12 +95,11 @@ int check_parameters(
                 Py_TYPE(py_drop_table)->tp_name,
                 arrow_table_to_db2_docstring.c_str());
             return -1;
-
         }
     }
 
     load_pyarrow();
- 
+
     try
     {
         if (arrow::py::is_table(py_parquet_table))
@@ -136,9 +120,6 @@ int check_parameters(
         PyErr_Format(PyExc_Exception, e.what());
         return -1;
     }
-    Py_XDECREF(py_str_table_name);
-    Py_XDECREF(py_str_schema_name);
-    Py_XDECREF(py_str_tablespace_name);
     return 0;
 }
 
@@ -150,28 +131,35 @@ PYOBJ_PTR  python_arrow_table_to_db2(
     char table_name[255] = {};
     char schema_name[255] = {};
     char tablespace_name[255] = {};
-    char * MESSAGE_FILE_ONE_BIG_CSV = nullptr;
+    char MessageFile[255] = {};
+    char TempFilesPath[255] = {};
     db2Uint32 iDataBufferSize = 0;
     db2Uint32 iSavecount = 0;
     db2Uint32 iChunkSize = 0;
-    PYOBJ_PTR py_table_name = NULL;
-    PYOBJ_PTR py_schema_name = NULL;
-    PYOBJ_PTR py_tablespace_name = NULL;
-    PYOBJ_PTR py_table_column_oriented = NULL;
-    PYOBJ_PTR py_conn_res = NULL;
-    PYOBJ_PTR py_parquet_table = NULL;
-    PYOBJ_PTR py_drop_table = NULL;
-    conn_handle * conn_res = NULL;
+    PYOBJ_PTR py_MessageFile = nullptr;
+    PYOBJ_PTR py_TempFilesPath = nullptr;
+    PYOBJ_PTR py_table_name = nullptr;
+    PYOBJ_PTR py_schema_name = nullptr;
+    PYOBJ_PTR py_tablespace_name = nullptr;
+    PYOBJ_PTR py_table_column_oriented = nullptr;
+    PYOBJ_PTR py_conn_res = nullptr;
+    PYOBJ_PTR py_parquet_table = nullptr;
+    PYOBJ_PTR py_drop_table = nullptr;
+    conn_handle * conn_res = nullptr;
     TABLE       parquet_table;
     bool        table_column_oriented = false;
     bool        drop_table = false;
+    py11::str py_str_MessageFile;
+    py11::str py_str_TempFilesPath;
     int ret = 0;
     MAP_FIELDNAME_DICT map_field_memory_vectors;
     int64_t num_rows = 0;
 
-    if (!PyArg_ParseTuple(args, "OsiiiOOOOOOO",
+
+    if (!PyArg_ParseTuple(args, "OOOiiiOOOOOOO",
         &py_conn_res,
-        &MESSAGE_FILE_ONE_BIG_CSV,
+        &py_MessageFile,
+        &py_TempFilesPath,
         &iDataBufferSize,
         &iSavecount,
         &iChunkSize,
@@ -184,19 +172,30 @@ PYOBJ_PTR  python_arrow_table_to_db2(
         &py_drop_table))
     {
         PyErr_Format(PyExc_ValueError,
-                     "%d %s() %s the function needs 12 parameters '%s'",
+                     "%d %s() %s the function needs 13 parameters",
                      __LINE__, __FUNCTION__,
-                     arrow_table_to_db2_docstring.c_str(),
-                     "yes 12 parameters");
+                     arrow_table_to_db2_docstring.c_str());
         return NULL;
     }
 
+
+    if (py_MessageFile != Py_None)
+    {
+        py_str_MessageFile = py11::reinterpret_borrow<py11::str>(py_MessageFile);
+        strcpy_s(MessageFile, 255, ((string) py_str_MessageFile).c_str());
+    }
+
+    if (py_TempFilesPath != Py_None)
+    {
+        py_str_TempFilesPath = py11::reinterpret_borrow<py11::str>(py_TempFilesPath);
+        strcpy_s(TempFilesPath, 255, ((string) py_str_TempFilesPath).c_str());
+    }
     ret = check_parameters(
-        py_conn_res, 
-        &conn_res, 
-        py_parquet_table, 
-        &parquet_table, 
-        py_table_name, 
+        py_conn_res,
+        &conn_res,
+        py_parquet_table,
+        &parquet_table,
+        py_table_name,
         py_schema_name,
         py_tablespace_name,
         py_table_column_oriented,
@@ -207,7 +206,7 @@ PYOBJ_PTR  python_arrow_table_to_db2(
         table_column_oriented,
         drop_table
     );
-    if (ret == -1) // this will provoke python to notice en exc happened
+    if (ret == -1) // this will provoke Python to notice an exc happened
         return NULL;
 
     num_rows = parquet_table->num_rows();
@@ -236,15 +235,15 @@ PYOBJ_PTR  python_arrow_table_to_db2(
     }
     // do the load
     db2LoadOut LoadOut;
-    //LOG_INFO("iDataBufferSize %ld iSavecount %ld", iDataBufferSize, iSavecount);
-    ret = do_the_load_arrow_to_one_big_csv(
+    ret = do_the_load_arrow(
         conn_res->henv,
         conn_res->hdbc,
         map_field_memory_vectors,
         tablespace_name,
         schema_name,
         table_name,
-        MESSAGE_FILE_ONE_BIG_CSV,
+        MessageFile,
+        TempFilesPath,
         iDataBufferSize,
         iSavecount,
         iChunkSize,
@@ -256,7 +255,7 @@ PYOBJ_PTR  python_arrow_table_to_db2(
     if (ret != 0)
     {
         PyErr_Format(PyExc_Exception,
-                     "do_the_load_arrow_to_one_big_csv failed %d %s() ret=%d",
+                     "do_the_load_arrow failed %d %s() ret=%d",
                      __LINE__,
                      __FUNCTION__,
                      ret);

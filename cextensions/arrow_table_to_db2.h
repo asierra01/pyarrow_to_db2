@@ -12,7 +12,7 @@
 typedef std::shared_ptr<arrow::Column> COLUMN;
 typedef std::shared_ptr<arrow::Table> TABLE;
 
-
+#define MAX_DIGITS 40
 
 typedef std::map <arrow::Type::type, std::string> MAP_ARROWTYPE_STRING;
 typedef std::map<string, MY_DICT *> MAP_FIELDNAME_DICT;
@@ -33,14 +33,15 @@ int create_table_in_backend_from_map_fieldname(
     bool         &column_organyze_by,
     bool         &column_boolean);
 
-int do_the_load_arrow_to_one_big_csv(
+int do_the_load_arrow(
     SQLHANDLE henv,
     SQLHANDLE hdbc,
     MAP_FIELDNAME_DICT &map_field_memory_vectors,
     const char * tablespace_name,
     const char * schema_name,
     const char * table_name,
-    const char * MESSAGE_FILE_ONE_BIG_CSV,
+    const char * MessageFile,
+    const char * TempFilesPath,
     db2Uint32  iDataBufferSize,
     db2Uint32  iSavecount,
     db2Uint32  iChunkSize,
@@ -52,34 +53,37 @@ int do_the_load_arrow_to_one_big_csv(
 
 MAP_ARROWTYPE_STRING &my_dict_arrow();
 
-struct my_db2load_struct
+struct db2load_struct
 {
     struct sqldcol *pDataDescriptor = NULL;
     db2LoadIn *pLoadIn = NULL;
     db2LoadOut *pLoadOut = NULL;
     db2LoadStruct *pLoadStruct = NULL;
     char *pMessageFile = NULL;
-    my_db2load_struct() = delete; // will never be generated
+    char *pTempFilesPath = NULL;
+    db2load_struct() = delete; // will never be generated
 
-    my_db2load_struct(
+    db2load_struct(
         db2LoadOut *LoadOut, 
         db2Uint64 iRowcount,
         db2Uint32 iSavecount,
         db2Uint32 iDataBufferSize,
-        const char * MESSAGE_FILE);
+        const char * MessageFile,
+        const char * TempFilesPath);
 
     int initialize_db2loadstructure(
         db2Uint64 iRowcount,
         db2Uint32 iSavecount, 
         db2Uint32 iDataBufferSize,
-        const char * MESSAGE_FILE);
+        const char * MessageFile,
+        const char * TempFilesPath);
 
-    ~my_db2load_struct();
+    ~db2load_struct();
  
 
 };
 
-typedef struct my_db2load_struct MY_DB2LOAD_STRUCTURE;
+typedef struct db2load_struct DB2LOAD_STRUCTURE;
 
 void log_mapfieldname_dict(
     MAP_FIELDNAME_DICT &map_field_memory_vectors);
@@ -94,6 +98,7 @@ int  bind_parameters_generic(
     SQLHANDLE hstmt,
     int64_t num_rows,
     MAP_FIELDNAME_DICT &map_field_memory_vectors,
+    MAP_COLNO_COLUMN_INFO& map_column_info,
     bool &column_boolean);
 
 void free_MAP_FIELDNAME_DICT(

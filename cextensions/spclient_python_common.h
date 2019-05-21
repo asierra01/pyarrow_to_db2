@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef IBM_DB_COMMON_H
-#define IBM_DB_COMMON_H
+#ifndef SPCLIENT_COMMON_H
+#define SPCLIENT_COMMON_H
 
 #define SPCLIENT_PYTHON_MAJOR 1
 #define SPCLIENT_PYTHON_MINOR 0
@@ -23,9 +23,7 @@ extern "C" {
 #include "win32_to_linux.h"
 
 #pragma push_macro("max")
-//#define max
 #include "utilcli.h"
-////#undef max
 #pragma pop_macro("max")
 
 #include <Python.h>
@@ -65,7 +63,6 @@ struct tagPyCArgObject {
 };
 typedef struct tagPyCArgObject PyCArgObject;
 
-//void _python_ibm_db_check_sql_errors( SQLHANDLE handle, SQLSMALLINT hType, int rc, int cpy_to_global, char* ret_str, int API, SQLSMALLINT recno );
 
 #define NIL_P(ptr) (ptr == NULL)
 
@@ -164,55 +161,78 @@ typedef struct _conn_handle_struct {
 void print_mylog_info(const char * buffer_log);
 void print_mylog_info_format(const char * format, ...);
 
-int run_PROC_SEND_CSV_TO_LOCAL_FS(
+int run_proc_send_csv_to_local_fs(
     SQLHANDLE hdbc,
     char * filename_in,
     SQLINTEGER len_filename,
     char * csv_data,
-    size_t file_size);
+    int64_t file_size
+);
 
 int extract_array_one_big_csv(
-        SQLHANDLE henv,
-        SQLHANDLE hdbc,
-        long      table);
+    SQLHANDLE henv,
+    SQLHANDLE hdbc,
+    long      table,
+    PYOBJ_PTR * py_out_open_int,
+    PYOBJ_PTR * py_out_root
+);
 
 
 int  display_parameters(
     SQLHANDLE      hdbc,
-    SQLHANDLE      hstmt);
+    SQLHANDLE      hstmt
+);
 
 int display_columns(
-        SQLHANDLE      hdbc,
-        SQLHANDLE      hstmt,
-        bool           display,
-        PYOBJ_PTR      py_list_describe_cols);
+    SQLHANDLE      hdbc,
+    SQLHANDLE      hstmt,
+    bool           display,
+    PYOBJ_PTR      py_list_describe_cols
+);
 
 int setCLILoadMode(
     SQLHANDLE, 
     SQLHANDLE, 
     int, 
-    db2LoadStruct*);
+    db2LoadStruct*
+);
 
 int load_c_example(
     SQLHANDLE henv,
-    SQLHANDLE hdbc);
+    SQLHANDLE hdbc
+);
 
 int run_the_test(
     SQLHANDLE henv, 
-    SQLHANDLE hdbc);
+    SQLHANDLE hdbc
+);
 // variables
 extern PYOBJ_PTR  mylog_info;
 extern PYOBJ_PTR  SpClientError;
 
 // functions
-
+PYOBJ_PTR  python_get_hdbc_handle(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_get_stmt_handle(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_sqlextendedstoreproc(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_sample_tbload_c(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_sample_tbload_c_cli(PYOBJ_PTR  self, PYOBJ_PTR  args);
 PYOBJ_PTR  python_arrow_table_to_db2(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_extract_array(PYOBJ_PTR  self, PYOBJ_PTR  args);
 PYOBJ_PTR  python_describe_parameters(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_describe_parameters_by_cli(PYOBJ_PTR  self, PYOBJ_PTR  args);
 PYOBJ_PTR  python_describe_columns(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_describe_columns_by_cli(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_extract_array_into_python(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_extract_array_one_big_csv(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_send_file(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_run_the_test(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_run_the_test_cli(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_run_the_test_only_windows(PYOBJ_PTR  self, PYOBJ_PTR  args);
 PYOBJ_PTR  python_call_get_db_size(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_call_get_db_size_with_timestamp(PYOBJ_PTR  self, PYOBJ_PTR  args);
 PYOBJ_PTR  python_create_dummy_exception(PYOBJ_PTR  self, PYOBJ_PTR  args);
 
-//void report_load(db2LoadOut *pLoadOut);
+extern PyMethodDef spclient_python_Methods[];
 
 int extract_array(
     SQLHANDLE henv,
@@ -227,11 +247,12 @@ int get_sqlextendedstoreproc(
     SQLHANDLE hdbc);
 
 int get_db_size(
-SQLHANDLE henv,
-SQLHANDLE hdbc,
-SQLBIGINT    *out_DATABASESIZE,
-SQLBIGINT    *out_DATABASECAPACITY,
-SQL_TIMESTAMP_STRUCT *out_snapshottimestamp);
+    SQLHANDLE henv,
+    SQLHANDLE hdbc,
+    SQLBIGINT    *out_DATABASESIZE,
+    SQLBIGINT    *out_DATABASECAPACITY,
+    SQL_TIMESTAMP_STRUCT *out_snapshottimestamp
+);
 
 
 

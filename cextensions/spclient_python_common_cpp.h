@@ -53,3 +53,4 @@ int check_error(
     const char * functionname);
 
 void print_dir(py11::object _object);
+const char* __doc__(PyCFunction func);
