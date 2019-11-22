@@ -4,6 +4,7 @@
 #include <sqlcodes.h>
 #include <chrono>
 #include <thread>
+#include <sstream>
 
 #define TRUE 1
 #define FALSE 0
@@ -46,14 +47,14 @@ void log_mapfieldname_dict(
 }
 
 void  create_generic_insert(
-        MAP_FIELDNAME_DICT &map_field_memory_vectors,
-        const char * schema_name,
-        const char * table_name,
-       std::string &insert_into)
+    MAP_FIELDNAME_DICT &map_field_memory_vectors,
+    const char * schema_name,
+    const char * table_name,
+    std::string &insert_into)
 {
     int i=0;
     size_t map_size = map_field_memory_vectors.size();
-    insert_into = "INSERT INTO \"";
+    insert_into = "INSERT INTO\n \"";
     string values = "\nVALUES (";
     if (schema_name != nullptr)
     {
@@ -87,9 +88,10 @@ void  create_generic_insert(
 }
 
 int run_dynamic_prepare(
-        SQLHANDLE hdbc,
-        SQLHANDLE hstmt,
-        std::string &dynamic_insert)
+    SQLHANDLE hdbc,
+    SQLHANDLE hstmt,
+    std::string &dynamic_insert,
+    ERROR_VAR_PARAM_DEF)
 {
     SQLRETURN cliRC = SQL_SUCCESS;
     int rc = 0;
@@ -103,9 +105,14 @@ int run_dynamic_prepare(
     if (log)
         LOG_INFO("\n%s\n", dynamic_insert.c_str());
 
+    Py_BEGIN_ALLOW_THREADS
     cliRC = SQLPrepare(hstmt,
                       (SQLCHAR *)dynamic_insert.c_str(),
                       (SQLINTEGER)dynamic_insert.length());
+    Py_END_ALLOW_THREADS
+
+    if (log)
+        LOG_INFO("SQLPrepare cliRC=%d", cliRC);
 
     STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
     if (log)
@@ -117,6 +124,7 @@ int run_dynamic_prepare(
 int do_the_load_arrow(
     SQLHANDLE henv,
     SQLHANDLE hdbc,
+    SQLHANDLE &hstmt,
     MAP_FIELDNAME_DICT &map_field_memory_vectors,
     const char  * tablespace_name,
     const char  * schema_name,
@@ -128,37 +136,41 @@ int do_the_load_arrow(
     db2Uint32   iChunkSize,
     bool        column_oriented,
     bool        drop_table,
+    bool        create_table,
     db2LoadOut  * pLoadOut,
-    int64_t     num_rows
+    int64_t     parquet_num_rows,
+    ERROR_VAR_PARAM_DEF
 )
 {
     SQLRETURN cliRC = SQL_SUCCESS;
     int rc = 0;
-    bool column_organyze_by = false;
+    long rows_loaded = 0;
+    long rows_deleted = 0;
+    long rows_committed = 0;
+    long rows_read = 0;
+
+    bool column_organize_by = false;
     bool column_boolean = true;
     bool display_parameter = false;
-    LOG_INFO("MessageFile '%s' TempFilesPath '%s'", MessageFile, TempFilesPath);
-    SQLHANDLE hstmt;
-    DB2LOAD_STRUCTURE load(pLoadOut,
-        num_rows,
-        iSavecount,
-        iDataBufferSize,
-        MessageFile,
-        TempFilesPath);
+    //LOG_INFO("MessageFile '%s' TempFilesPath '%s'", MessageFile, TempFilesPath);
+ 
+    DB2LOAD_STRUCTURE load( pLoadOut,
+                            parquet_num_rows,
+                            iSavecount,
+                            iDataBufferSize,
+                            MessageFile,
+                            TempFilesPath);
 
     cliRC = SQLAllocHandle(SQL_HANDLE_STMT,
                            hdbc,
                            &hstmt);
-    STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
+    DBC_HANDLE_CHECK(hdbc, cliRC);
     const char* env_log_rows = std::getenv("SPCLIENT_PYTHON_LOG_ROWS");
     if (env_log_rows != nullptr)
     {
         if (string(env_log_rows) == "1")
-        {
             log_mapfieldname_dict(map_field_memory_vectors);
-        }
     }
-
 
     rc = create_table_in_backend_from_map_fieldname(
                  hdbc,
@@ -169,8 +181,10 @@ int do_the_load_arrow(
                  table_name,
                  column_oriented,
                  drop_table,
-                 column_organyze_by,
-                 column_boolean);
+                 create_table,
+                 column_organize_by,
+                 column_boolean,
+                 ERROR_VAR_PARAM);
 
     std::string  generic_insert;
     create_generic_insert(
@@ -179,17 +193,13 @@ int do_the_load_arrow(
             table_name,
             generic_insert);
 
-    rc = run_dynamic_prepare(hdbc, hstmt, generic_insert);
+    rc = run_dynamic_prepare(hdbc, hstmt, generic_insert, ERROR_VAR_PARAM);
     if (rc != SQL_SUCCESS)
+    {
+        LOG_INFO("run_dynamic_prepare failed %d", rc);
         return rc;
+    }
  
-    //bool display_columns = false;
-    //const char* env_log_column = std::getenv("SPCLIENT_PYTHON_LOG_COLUMN");
-    //if (env_log_column != NULL)
-    //{
-    //    if (string(env_log_column) == "1")
-    //        display_columns = true;
-    //}
     const char* env_log_parameter = std::getenv("SPCLIENT_PYTHON_LOG_PARAMETER");
     if (env_log_parameter != nullptr)
     {
@@ -208,29 +218,30 @@ int do_the_load_arrow(
     MAP_COLNO_COLUMN_INFO   map_colno_sql_type; // this could be used for grained column definition
     int ret = display_parameters_map(hdbc,
                                      hstmt,
+                                     table_name,
                                      map_colno_sql_type,
-                                     display_parameter);
+                                     display_parameter,
+                                     ERROR_VAR_PARAM);
+ 
 
-    if (displgeneral_log)
-        LOG_INFO("display_parameters_map %d", ret);
     if (ret != 0)
     {
-        cliRC = SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
-        STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
+        if (displgeneral_log)
+            LOG_INFO("display_parameters_map falied %d", ret);
         return ret;
-
     }
 
     if (iChunkSize == 0)
-        iChunkSize = num_rows / 10;
+        //iChunkSize = parquet_num_rows / 10;
+        iChunkSize = 10000;
 
     int64_t chunks_size;
     SQLULEN chunks_size_proccesed = 0;
 
-    if (num_rows> iChunkSize)
+    if (parquet_num_rows> iChunkSize)
         chunks_size = iChunkSize;
     else
-        chunks_size = num_rows;
+        chunks_size = parquet_num_rows;
 
     // Set the SQL_ATTR_PARAM_BIND_TYPE statement attribute to use
     // column-wise binding.  
@@ -239,9 +250,9 @@ int do_the_load_arrow(
 
     /* set the array size */
     cliRC = SQLSetStmtAttr(hstmt,
-                          SQL_ATTR_PARAMSET_SIZE,
-                          (SQLPOINTER)chunks_size,
-                          0);
+                           SQL_ATTR_PARAMSET_SIZE,
+                           (SQLPOINTER)chunks_size,
+                           0);
     STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
 
     /* set the processed records status variable*/
@@ -251,36 +262,59 @@ int do_the_load_arrow(
                            0);
     STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
 
+    cliRC = SQLSetStmtAttr(hstmt,
+                           SQL_ATTR_LOAD_ROWS_COMMITTED_PTR,
+                           &rows_committed,
+                           SQL_IS_POINTER);
+ 
+    cliRC = SQLSetStmtAttr(hstmt,
+                           SQL_ATTR_LOAD_ROWS_READ_PTR,
+                           &rows_read,
+                           SQL_IS_POINTER);
+
+    cliRC = SQLSetStmtAttr(hstmt,
+                           SQL_ATTR_LOAD_ROWS_LOADED_PTR,
+                           &rows_loaded,
+                           SQL_IS_POINTER);
+    cliRC = SQLSetStmtAttr(hstmt,
+                           SQL_ATTR_LOAD_ROWS_DELETED_PTR,
+                           &rows_deleted,
+                           SQL_IS_POINTER);
+
+
     if (displgeneral_log)
-        LOG_INFO("ready for bind_parameters_generic");
+        LOG_INFO("ready for bind_parameters");
     /* bind the parameters */
-    rc = bind_parameters_generic(
+    rc = bind_parameters(
             hdbc,
             hstmt,
-            num_rows,
+            parquet_num_rows,
             map_field_memory_vectors,
             map_colno_sql_type,
-            column_boolean);
+            column_boolean,
+            ERROR_VAR_PARAM);
 
     if (rc != 0)
     {
-        LOG_INFO("bind_parameters_generic failed %d", rc);
+        LOG_INFO("bind_parameters failed %d", rc);
         return rc;
     }
     else
     {
         if (displgeneral_log)
-            LOG_INFO(" bind_parameters_generic OK ");
+            LOG_INFO(" bind_parameters OK ");
 
     }
     /* turn CLI LOAD ON */
-    rc = setCLILoadMode(hstmt, hdbc, TRUE, load.pLoadStruct);
-    int64_t chunks_count = num_rows / chunks_size;
-    std::string str_num_rows = "'{:,}'"_s.format(num_rows);
-
+    rc = setCLILoadMode(hstmt, hdbc, TRUE, load.pLoadStruct, ERROR_VAR_PARAM);
+    int64_t chunks_count = parquet_num_rows / chunks_size;
+    string str_num_rows = "'{:,}'"_s.format(parquet_num_rows);
+    string str_chunks_size = "'{:,}'"_s.format(chunks_size);
 
     if (displgeneral_log)
-        LOG_INFO(" Inserting %s rows.. chunks_size %lld", str_num_rows.c_str(), chunks_size);
+        LOG_INFO(" Inserting %s rows.. chunks_size %s",
+                 str_num_rows.c_str(),
+                 str_chunks_size.c_str());
 
     int64_t total_inserted = 0;
     for (int64_t i = 0; i < chunks_count; i++)
@@ -292,48 +326,39 @@ int do_the_load_arrow(
         cliRC = SQLExecute(hstmt);
         Py_END_ALLOW_THREADS;
 
-
         if (cliRC != SQL_SUCCESS)
         {
             LOG_INFO("done SQLExecute %d", cliRC);
-            rc = check_error(hdbc, hstmt, cliRC, __LINE__, __FUNCTION__);
+            rc = check_error(hdbc, hstmt, cliRC, __LINE__, __FUNCTION__, ERROR_VAR_PARAM);
+            LOG_INFO("done SQLExecute rc %d", rc);
         }
         else
         {
             rc = 0;
-            //for (auto const& item : map_field_memory_vectors)
-           // {
-           //     if (item.second->vector_type == arrow::Type::DECIMAL)
-           //     {
-           //         for (int64_t j = 0; j < chunks_size; j++)
-           //         {
-           //             LOG_INFO(" sizes %d", item.second->m_str_lens[i]);
-           //         }
-           //     }
-           // }
         }
 
-        if (rc != 0)
+        if (cliRC != 0)
         {
+            SQLRETURN originalcliRC = cliRC;
             if (displgeneral_log)
-                LOG_INFO("the load failed, rc %d", rc);
-            SQLCHAR message[SQL_MAX_MESSAGE_LENGTH + 1];
-            SQLCHAR sqlstate[SQL_SQLSTATE_SIZE + 1];
-            SQLINTEGER sqlcode;
+                LOG_INFO("the load failed, cliRC %d", cliRC);
+
             SQLSMALLINT length;
 
             SQLGetDiagRec(SQL_HANDLE_STMT,
                 hstmt,
                 1,
                 sqlstate,
-                &sqlcode,
+                sqlcode,
                 message,
                 SQL_MAX_MESSAGE_LENGTH + 1,
                 &length);
-            if (sqlcode != SQL_RC_E552)
+
+            if (*sqlcode != SQL_RC_E552)
             //User doesnt have rights for a LOAD...aka LOAD was never started
             {
-                rc = setCLILoadMode(hstmt, hdbc, FALSE, load.pLoadStruct);
+                LOG_INFO("sqlcode %d != SQL_RC_E552", *sqlcode);
+                rc = setCLILoadMode(hstmt, hdbc, FALSE, load.pLoadStruct, ERROR_VAR_PARAM);
                 if (rc != 0)
                     LOG_INFO("setCLILoadMode %d", rc);
             }
@@ -342,48 +367,59 @@ int do_the_load_arrow(
             Py_END_ALLOW_THREADS;
 
             if (cliRC != 0)
+            {
                 LOG_INFO("SQLEndTran %d", cliRC);
+                rc = HandleInfoPrint(SQL_HANDLE_DBC, hdbc,
+                    cliRC, __LINE__, __FILE__, ERROR_VAR_PARAM);
+
+            }
 
             cliRC = SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
             if (cliRC != 0)
                 LOG_INFO("SQLFreeHandle %d", cliRC);
-            return rc;
+            hstmt = SQL_NULL_HSTMT;
+
+            LOG_INFO("returning originalcliRC %d", originalcliRC);
+            return originalcliRC;
         }
         else if (displgeneral_log)
-            {
-                std::string str_chunks_inserted = "'{:,}'"_s.format(chunks_size * (i + 1));
-
-                LOG_INFO("Inserting %3d % 13s rows.. total % 13s %d",
-                    i,
-                    str_chunks_inserted.c_str(),
-                    str_num_rows.c_str(),
-                    chunks_size_proccesed);
-            }
+        {
+            std::string str_chunks_inserted = "'{:,}'"_s.format(chunks_size * (i + 1));
+            LOG_INFO("Inserting %3d % 13s rows.. total % 13s %d",
+                i,
+                str_chunks_inserted.c_str(),
+                str_num_rows.c_str(),
+                chunks_size_proccesed);
+        }
 
     }
-    int64_t remaining = num_rows - total_inserted;
+    int64_t remaining = parquet_num_rows - total_inserted;
 
     // do remaining amount
 
     if (remaining > 0)
     {
         cliRC = SQLSetStmtAttr(hstmt,
-            SQL_ATTR_PARAMSET_SIZE,
-            (SQLPOINTER)remaining,
-            0);
+                               SQL_ATTR_PARAMSET_SIZE,
+                               (SQLPOINTER)remaining,
+                               0);
         STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
 
         Py_BEGIN_ALLOW_THREADS;
         cliRC = SQLExecute(hstmt);
         Py_END_ALLOW_THREADS;
+
         STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
+
         if (displgeneral_log)
             LOG_INFO("remaining %ld %d", remaining, chunks_size_proccesed);
 
     }
 
     /* turn CLI LOAD OFF */
-    rc = setCLILoadMode(hstmt, hdbc, FALSE, load.pLoadStruct);
+    if (displgeneral_log)
+        LOG_INFO("calling  setCLILoadMode");
+    rc = setCLILoadMode(hstmt, hdbc, FALSE, load.pLoadStruct, ERROR_VAR_PARAM);
 
     if (displgeneral_log)
         LOG_INFO("starting last SQL_COMMIT");
@@ -391,17 +427,65 @@ int do_the_load_arrow(
     Py_BEGIN_ALLOW_THREADS;
     cliRC = SQLEndTran(SQL_HANDLE_DBC, hdbc, SQL_COMMIT);
     Py_END_ALLOW_THREADS;
+    rc = HandleInfoPrint(SQL_HANDLE_DBC, hdbc,
+                         cliRC, __LINE__, __FILE__, ERROR_VAR_PARAM);
 
+    //if (displgeneral_log // yes it works
+    //    LOG_INFO("Value of SQL_ATTR_LOAD_ROWS_READ_PTR       is %ld", rows_read);
+    //    LOG_INFO("Value of SQL_ATTR_LOAD_ROWS_LOADED_PTR     is %ld", rows_loaded);
+    //    LOG_INFO("Value of SQL_ATTR_LOAD_ROWS_COMMITTED_PTR  is %ld", rows_committed);
+    //    LOG_INFO("Value of SQL_ATTR_LOAD_ROWS_DELETED_PTR    is %ld", rows_deleted);
+
+#define READ_LOAD__ // yes it works ? we can use it later
+#ifdef READ_LOAD
+    long* prows_loaded;
+    long* prows_read;
+    long* prows_deleted;
+    long* prows_committed;
+    rc = SQLGetStmtAttr(hstmt,
+                        SQL_ATTR_LOAD_ROWS_LOADED_PTR,
+                        &prows_loaded,
+                        sizeof(rows_loaded),
+                        NULL);
+    STMT_HANDLE_CHECK(hstmt, hdbc, rc);
+
+    rc = SQLGetStmtAttr(hstmt,
+                        SQL_ATTR_LOAD_ROWS_READ_PTR,
+                        &prows_read,
+                        sizeof(rows_read),
+                        NULL);
+    STMT_HANDLE_CHECK(hstmt, hdbc, rc);
+
+    rc = SQLGetStmtAttr(hstmt,
+                        SQL_ATTR_LOAD_ROWS_COMMITTED_PTR,
+                        &prows_committed,
+                        sizeof(rows_committed),
+                        NULL);
+    STMT_HANDLE_CHECK(hstmt, hdbc, rc);
+
+    rc = SQLGetStmtAttr(hstmt,
+                        SQL_ATTR_LOAD_ROWS_DELETED_PTR,
+                        &prows_deleted,
+                        sizeof(rows_deleted),
+                        NULL);
+    STMT_HANDLE_CHECK(hstmt, hdbc, rc);
+    
     if (displgeneral_log)
-        LOG_INFO("last SQL_COMMIT cliRC=%d", cliRC);
-    rc = check_error(hdbc, hstmt, cliRC, __LINE__, __FUNCTION__);
+        LOG_INFO("Value of SQL_ATTR_LOAD_ROWS_READ_PTR      is %ld",  *prows_read);
+        LOG_INFO("Value of SQL_ATTR_LOAD_ROWS_LOADED_PTR    is %ld",  *prows_loaded);
+        LOG_INFO("Value of SQL_ATTR_LOAD_ROWS_COMMITTED_PTR is %ld",  *prows_committed);
+        LOG_INFO("Value of SQL_ATTR_LOAD_ROWS_DELETED_PTR   is %ld",  *prows_deleted);
 
+#endif
+    if ((displgeneral_log) && (cliRC !=0))
+        LOG_INFO("last SQL_COMMIT cliRC=%d", cliRC);
 
     cliRC = SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
     STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
+    hstmt = SQL_NULL_HSTMT;
 
     if (displgeneral_log)
-        LOG_INFO("Load messages can be found in file [%s].", MessageFile);
+        LOG_INFO("\nLoad messages can be found in file [%s].", MessageFile);
     return 0;
 
 }

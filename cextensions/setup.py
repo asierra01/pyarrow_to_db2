@@ -14,10 +14,29 @@ from distutils.sysconfig import get_python_inc, get_python_lib
 import distutils
 import site
 from texttable import Texttable
-import pyarrow
 import numpy
 import pybind11
 import glob
+from ctypes import cdll
+import platform
+
+import site
+
+print (site.getsitepackages())
+
+sitepackages = site.getsitepackages()
+for sitepackage in sitepackages:
+    pyarrow_path = os.path.join(sitepackage, "pyarrow")
+    if os.path.exists(pyarrow_path):
+        os.environ["PATH"] += ";"+pyarrow_path
+        print("found !!!")
+        print("%s" % pprint.pformat(os.environ["PATH"]))
+        if platform.system() == "Windows":
+            lib = cdll.LoadLibrary("lib.cp37-win_amd64.pyd")
+            lib.PyInit_lib()
+
+import pyarrow.lib
+import pyarrow
 
 try:
     os.mkdir('log')
@@ -179,7 +198,7 @@ else:
 
 
 def get_utilcli_c_location():
-    utilcli_c_location = os.path.join(provide_sample_cli_dir(), "utilcli.c")
+    utilcli_c_location = os.path.join(provide_sample_cli_dir(), "utilcli.cpp")
     return utilcli_c_location
 
 

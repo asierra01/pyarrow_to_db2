@@ -10,9 +10,12 @@ set(SPCLIENT_PYTHON_VERSION ${SPCLIENT_PYTHON_MAJOR}.${SPCLIENT_PYTHON_MINOR}.${
 
 message("Generating spclient_python") 
 
-if(DEFINED  ENV{DB2INCLUDE}) 
+include(project_helper.cmake)
+
+if (DEFINED  ENV{DB2INCLUDE})
     include_directories("$ENV{DB2INCLUDE}")
     message(STATUS "ENV DB2INCLUDE                 : $ENV{DB2INCLUDE}" )
+    message(STATUS "ENV DB2PATH                    : $ENV{DB2PATH}" )
 
     set (my_DB2INCLUDE $ENV{DB2INCLUDE})
 
@@ -36,22 +39,23 @@ if(DEFINED  ENV{DB2INCLUDE})
 
 else ()
     message(WARNING "env variable DB2INCLUDE, not set")
-endif() 
+endif()
 
 if (WIN32)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS -DSPCLIENT_PYTHON)
-    find_library(DB2API_LIBRARY  db2api HINTS $ENV{DB2PATH}/lib)
+    find_library(DB2API_LIBRARY  NAMES db2api HINTS $ENV{DB2PATH}\\lib NO_DEFAULT_PATH DOC "db2api.lib library under windows")
+    #message(STATUS "DB2API_LIBRARY                 : " ${DB2API_LIBRARY})
+    if(EXISTS "${DB2API_LIBRARY}")
+        message(STATUS "DB2API_LIBRARY exist           : " ${DB2API_LIBRARY})
+    else()
+        message(WARNING "DB2API_LIBRARY do not exist                : " ${DB2API_LIBRARY})
+        set (DB2API_LIBRARY $ENV{DB2PATH}\\lib\\db2api.lib) 
+        #message(WARNING "using DB2API_LIBRARY                       : " ${DB2API_LIBRARY})
+    endif()
 else()
     add_definitions(-DSPCLIENT_PYTHON)
-    find_library(DB2API_LIBRARY  db2 HINTS $ENV{DB2PATH}/lib)
+    find_library(DB2API_LIBRARY NAMES db2 HINTS $ENV{DB2PATH}/lib DOC "db2.lib library under linux/darwin")
 endif()
-
-function(set_python_headers)
-    set (PYTHON_HEADERS ${Python3_INCLUDE_DIRS}/Python.h
-                        ${Python3_INCLUDE_DIRS}/pythread.h
-         PARENT_SCOPE)
-
-endfunction(set_python_headers)
 
 function(set_cpp_files)
     FILE (GLOB CPP_FILES *.cpp )
@@ -76,11 +80,11 @@ endfunction(set_cpp_files)
 function(set_c_files)
     FILE (GLOB C_FILES *.c)
     if(WIN32)
-        LIST(APPEND C_FILES win64/utilcli.c win64/utilcli.h)
+        LIST(APPEND C_FILES win64/utilcli.cpp win64/utilcli.h)
     elseif(APPLE)
-        LIST(APPEND C_FILES osx/utilcli.c osx/utilcli.h)
+        LIST(APPEND C_FILES osx/utilcli.cpp osx/utilcli.h)
     elseif(UNIX AND NOT APPLE)
-        LIST(APPEND C_FILES lin64/utilcli.c lin64/utilcli.h)
+        LIST(APPEND C_FILES lin64/utilcli.cpp lin64/utilcli.h)
     endif()
 
     foreach (C_FILE ${C_FILES})
@@ -92,208 +96,22 @@ function(set_c_files)
 
 endfunction(set_c_files)
 
-function (set_parquet_headers)
-    set (PARQUET_HEADERS 
-         ${PYARROW_OUT_HEADER}/parquet/exception.h
-        PARENT_SCOPE)
-endfunction(set_parquet_headers)
 
-function (set_pyarrow_headers)
-    message(STATUS "PROJECT_SOURCE_DIR             : " ${PROJECT_SOURCE_DIR})
-    set (PYARROW_HEADERS 
-         ${PYARROW_OUT_HEADER}/arrow/python/pyarrow.h
-         ${PYARROW_OUT_HEADER}/arrow/api.h
-         ${PYARROW_OUT_HEADER}/arrow/io/api.h
-         ${PROJECT_SOURCE_DIR}/include/arrow/python/util/datetime.h
-        PARENT_SCOPE)
-endfunction(set_pyarrow_headers)
-
-
-function(display_python_var)
-    message(STATUS "Python3_INCLUDE_DIRS           : " ${Python3_INCLUDE_DIRS})
-    message(STATUS "Python3_LIBRARY_DIRS           : " ${Python3_LIBRARY_DIRS})
-    message(STATUS "Python3_VERSION                : " ${Python3_VERSION})
-    message(STATUS "Python3_EXECUTABLE             : " ${Python3_EXECUTABLE})
-    message(STATUS "Python3_ROOT_DIR               : " ${Python3_ROOT_DIR}) #this variable if set is used as a Hint to find Python3 on Darwin is set
-    message(STATUS "Python3_SITELIB                : " ${Python3_SITELIB})
-    message(STATUS "Python3_LIBRARY_RELEASE        : " ${Python3_LIBRARY_RELEASE})
-    message(STATUS "Python3_LIBRARY_DEBUG          : " ${Python3_LIBRARY_DEBUG})
-    message(STATUS "Python3_RUNTIME_LIBRARY_RELEASE: " ${Python3_RUNTIME_LIBRARY_RELEASE})
-    message(STATUS "Python3_RUNTIME_LIBRARY_DEBUG  : " ${Python3_RUNTIME_LIBRARY_DEBUG})
-
-endfunction(display_python_var)
-
-function(display_pyarrow_h)
-    foreach(arrow_h ${PYARROW_HEADERS})
-        message(STATUS "arrow_h                        : " ${arrow_h})
-    endforeach()
-
-    foreach(parquet_h ${PARQUET_HEADERS})
-        message(STATUS "parquet_h                      : " ${parquet_h})
-    endforeach()
-
-endfunction(display_pyarrow_h)
-
-
-function(display_numpy_var)
-    message(STATUS "NUMPY_HEADER_LOC               : " ${NUMPY_OUT_HEADER})
-endfunction(display_numpy_var)
-
-function(display_pyarrow_var)
-    message(STATUS "PYARROW_OUT_HEADER             : " ${PYARROW_OUT_HEADER})
-    message(STATUS "PYARROW_OUT_LIBRARY_LOC        : " ${PYARROW_OUT_LIBRARY_LOC})
-    message(STATUS "SPCLIENT_PYTHON_VERSION        : " ${SPCLIENT_PYTHON_VERSION})
-    message(STATUS "NUMPY_VERSION                  : " ${NUMPY_OUT_VERSION})
-    message(STATUS "PYARROW_VERSION                : " ${PYARROW_OUT_VERSION})
-    message(STATUS "DB2 SDK Ver                    : " ${DB2VER_OUT})
-
-endfunction(display_pyarrow_var)
-
-function (get_dll_name)
-    execute_process(COMMAND ${Python3_EXECUTABLE} build_name.py
-                        RESULT_VARIABLE BUILDNAME_RES
-                        OUTPUT_VARIABLE BUILDNAME_OUT)
-    #message(STATUS "BUILDNAME_OUT  " ${BUILDNAME_OUT})
-    STRING(REPLACE "\n" "" BUILDNAME_OUT ${BUILDNAME_OUT} )
-    set (BUILDNAME_OUT ${BUILDNAME_OUT}
-             PARENT_SCOPE)
-
-
-endfunction (get_dll_name)
-
-function (find_pybind11_loc)
-    if (NOT ${Python3_EXECUTABLE} MATCHES "Python3_EXECUTABLE-NOTFOUND")
-        execute_process(COMMAND ${Python3_EXECUTABLE} -m pybind11 --includes
-                        RESULT_VARIABLE PYBIND11_RES_HEADER
-                        OUTPUT_VARIABLE PYBIND11_OUT_HEADER)
-
-        STRING(REPLACE "\n" "" PYBIND11_OUT_HEADER ${PYBIND11_OUT_HEADER} )
-        set (PYBIND11_OUT_HEADER ${PYBIND11_OUT_HEADER}
-             PARENT_SCOPE)
-
-        set (PYBIND11_RES_HEADER ${PYBIND11_RES_HEADER}
-             PARENT_SCOPE)
-    else()
-        message(STATUS "Cant run python.exe as Python3_EXECUTABLE  : " ${Python3_EXECUTABLE})
-    endif()
-endfunction(find_pybind11_loc)
-
-function (find_arrow_loc)
-    execute_process(COMMAND ${Python3_EXECUTABLE} -c "import numpy; print (numpy.get_include())"
-                    RESULT_VARIABLE NUMPY_RES_HEADER
-                    OUTPUT_VARIABLE NUMPY_OUT_HEADER)
-
-    execute_process(COMMAND ${Python3_EXECUTABLE} -c "import pyarrow; print (pyarrow.get_include())"
-                    RESULT_VARIABLE PYARROW_RES_HEADER
-                    OUTPUT_VARIABLE PYARROW_OUT_HEADER)
-
-    execute_process(COMMAND ${Python3_EXECUTABLE} -c "import pyarrow; print (pyarrow.get_library_dirs()[0])"
-                    RESULT_VARIABLE PYARROW_RES_LIBRARY_LOC
-                    OUTPUT_VARIABLE PYARROW_OUT_LIBRARY_LOC)
-
-    execute_process(COMMAND ${Python3_EXECUTABLE} -c "import pyarrow; print (pyarrow.get_libraries())"
-                    RESULT_VARIABLE PYARROW_RES_LIBRARIES
-                    OUTPUT_VARIABLE PYARROW_OUT_LIBRARIES)
-
-    execute_process(COMMAND ${Python3_EXECUTABLE} -c "import pyarrow; print (pyarrow.__version__)"
-                    RESULT_VARIABLE PYARROW_RES_LIBRARIES
-                    OUTPUT_VARIABLE PYARROW_OUT_VERSION)
-
-    execute_process(COMMAND ${Python3_EXECUTABLE} -c "import numpy; print (numpy.__version__)"
-                    RESULT_VARIABLE NUMPY_RES_HEADER
-                    OUTPUT_VARIABLE NUMPY_OUT_VERSION)
-
-    execute_process(COMMAND ${Python3_EXECUTABLE} find_db2_ver.py
-                    RESULT_VARIABLE DB2VER_RES_HEADER
-                    OUTPUT_VARIABLE DB2VER_OUT)
-
-
-
-
-    STRING(REPLACE "\n" "" NUMPY_OUT_HEADER ${NUMPY_OUT_HEADER} )
-    STRING(REPLACE "\n" "" PYARROW_OUT_LIBRARY_LOC ${PYARROW_OUT_LIBRARY_LOC} )
-    STRING(REPLACE "\n" "" PYARROW_OUT_HEADER ${PYARROW_OUT_HEADER} )
-    STRING(REPLACE "\n" "" PYARROW_OUT_VERSION ${PYARROW_OUT_VERSION} )
-    STRING(REPLACE "\n" "" NUMPY_OUT_VERSION ${NUMPY_OUT_VERSION} )
-    STRING(REPLACE "\n" "" DB2VER_OUT ${DB2VER_OUT} )
-
-
-
-    if (PYARROW_RES_LIBRARIES EQUAL 0)
-        STRING(REPLACE "\n" "" PYARROW_OUT_LIBRARIES ${PYARROW_OUT_LIBRARIES} )
-        STRING(REPLACE "[" "" PYARROW_OUT_LIBRARIES ${PYARROW_OUT_LIBRARIES} )
-        STRING(REPLACE "]" "" PYARROW_OUT_LIBRARIES ${PYARROW_OUT_LIBRARIES} )
-        STRING(REPLACE "'" "" PYARROW_OUT_LIBRARIES ${PYARROW_OUT_LIBRARIES} )
-        STRING(REPLACE ", " ";" PYARROW_OUT_LIBRARIES ${PYARROW_OUT_LIBRARIES} )
-    endif()
- 
-    set (NUMPY_RES_HEADER ${NUMPY_RES_HEADER}
-         PARENT_SCOPE)
-
-    set (NUMPY_OUT_HEADER ${NUMPY_OUT_HEADER}
-         PARENT_SCOPE)
-
-    set (PYARROW_RES_HEADER ${PYARROW_RES_HEADER}
-         PARENT_SCOPE)
-
-    set (PYARROW_OUT_HEADER ${PYARROW_OUT_HEADER}
-         PARENT_SCOPE)
-
-    set (PYARROW_RES_LIBRARY_LOC ${PYARROW_RES_LIBRARY_LOC}
-         PARENT_SCOPE)
-
-    set (PYARROW_OUT_LIBRARY_LOC ${PYARROW_OUT_LIBRARY_LOC}
-         PARENT_SCOPE)
-
-    set (PYARROW_OUT_LIBRARIES ${PYARROW_OUT_LIBRARIES}
-         PARENT_SCOPE)
-
-    set (PYARROW_OUT_VERSION ${PYARROW_OUT_VERSION}
-         PARENT_SCOPE)
-
-    set (NUMPY_OUT_VERSION ${NUMPY_OUT_VERSION}
-         PARENT_SCOPE)
-
-    set (DB2VER_OUT ${DB2VER_OUT}
-         PARENT_SCOPE)
-
-
-endfunction(find_arrow_loc)
-
-function(display_python_headers)
-
-    foreach (PYTHON_HEADER ${PYTHON_HEADERS})
-        message(STATUS "PYTHON_HEADER                  : " ${PYTHON_HEADER})
-    endforeach()
-
-endfunction(display_python_headers)
-
-function(clean_pybind11)
-    if (PYBIND11_RES_HEADER EQUAL 0)
-        STRING(REPLACE "-I" "" PYBIND11_OUT_HEADER ${PYBIND11_OUT_HEADER} )
-        STRING(REPLACE " " ";" PYBIND11_OUT_HEADER_LIST ${PYBIND11_OUT_HEADER} )
-        foreach (PYBIND11_PATH ${PYBIND11_OUT_HEADER_LIST})
-            include_directories(${PYBIND11_PATH})
-            message(STATUS "PYBIND11_PATH                  : " ${PYBIND11_PATH})
-        endforeach()
-    endif()
-endfunction(clean_pybind11)
 
 # This ensures that things like gnu++11 get passed correctly
 set(CMAKE_CXX_STANDARD 11)
-
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(WIN32)
-    set(CMAKE_CXX_STANDARD_REQUIRED ON)
     #set(CMAKE_SHARED_MODULE_SUFFIX ".pyd" )
     #message(STATUS "CMAKE_SHARED_MODULE_SUFFIX  :" ${CMAKE_SHARED_MODULE_SUFFIX})
 
     if (IS_DIRECTORY "C:/Python37")
         message(STATUS "Directory exist 'C:/Python37' setting Python3_ROOT_DIR to 'C:/Python37'")
-        set(Python3_ROOT_DIR  C:/Python37)
+        #set(Python3_ROOT_DIR  C:/Python37)
     elseif (IS_DIRECTORY "E:/Python37")
         message(STATUS "Directory exist 'E:/Python37' setting Python3_ROOT_DIR to 'E:/Python37'")
-        set(Python3_ROOT_DIR  E:/Python37)
+        #set(Python3_ROOT_DIR  E:/Python37)
     endif()
 
     find_package(Python3 COMPONENTS Interpreter Compiler Development Numpy)
@@ -311,8 +129,6 @@ if(WIN32)
     foreach(DIR ${Python3_LIBRARIES})
         message(STATUS "Python3_LIBRARIES              : " ${DIR})
     endforeach()
-
-
 
     message(STATUS "CMAKE_GENERATOR                : " ${CMAKE_GENERATOR})
     message(STATUS "MSVC_TOOLSET_VERSION           : " ${MSVC_TOOLSET_VERSION})
@@ -336,27 +152,13 @@ if(WIN32)
     endif()
 
     add_definitions( -D_CRT_SECURE_NO_WARNINGS -DNOMINMAX)
-
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:100000")
+    message(STATUS "CMAKE_EXE_LINKER_FLAGS         : " ${CMAKE_EXE_LINKER_FLAGS})
     find_arrow_loc()
     find_pybind11_loc()
     clean_pybind11()
 
     set_python_headers()
-
-    if (NUMPY_RES_HEADER EQUAL 0)
-        STRING(REPLACE "\\" "/" NUMPY_OUT_HEADER ${NUMPY_OUT_HEADER} )
-        list(APPEND PYTHON_HEADERS ${NUMPY_OUT_HEADER}/numpy/arrayobject.h)
-    endif()
-
-    if (PYARROW_RES_LIBRARY_LOC EQUAL 0)
-        STRING(REPLACE "\\" "/" PYARROW_OUT_LIBRARY_LOC ${PYARROW_OUT_LIBRARY_LOC} )
-    endif()
-
-    if (PYARROW_RES_HEADER EQUAL 0)
-        STRING(REPLACE "\\" "/" PYARROW_OUT_HEADER ${PYARROW_OUT_HEADER} )
-        list(APPEND PYTHON_HEADERS ${PYARROW_OUT_HEADER}/arrow/python/pyarrow.h)
-    endif()
-
     set_pyarrow_headers()
     set_parquet_headers()
     set_cpp_files()
@@ -405,8 +207,7 @@ if(WIN32)
         target_link_libraries(${PROJECT_NAME} ${DB2API_LIBRARY})
     endif()
 
-
-    if (PYARROW_RES_LIBRARY_LOC EQUAL 0)
+   if (PYARROW_RES_LIBRARY_LOC EQUAL 0)
         target_link_libraries(${PROJECT_NAME}
         ${PYARROW_OUT_LIBRARY_LOC}\\parquet.lib
         )
@@ -417,7 +218,6 @@ if(WIN32)
 
         message(STATUS "adding link library            : " ${PYARROW_OUT_LIBRARY_LOC}\\parquet.lib)
     endif()
-
 
     set (COMPILE_PDB_NAME ${PROJECT_NAME})
 
@@ -467,7 +267,7 @@ if(WIN32)
                         COMMAND  ${COPY_COMMAND} $(OutDir)$(TargetName).pdb $(OutDir)${BUILDNAME_OUT_PDB}
                         COMMENT "Copying  $(OutDir)${BUILDNAME_OUT_PDB}"
                         DEPENDS ${COPY_COMMAND} $(OutDir)$(TargetName).pdb
-                        
+
                         VERBATIM
                     )
 
@@ -479,7 +279,10 @@ if (UNIX)
         #set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
         #set(Python3_ROOT_DIR  /usr/local/Cellar/python/3.7.1)
     else()
-        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -pthread -D_GLIBCXX_USE_CXX11_ABI=0 ")
+        #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -pthread -D_GLIBCXX_USE_CXX11_ABI=0 ")
+        #I already did set(CMAKE_CXX_STANDARD 11) why do I need to do -std=c++11
+
+        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -D_GLIBCXX_USE_CXX11_ABI=0 ")
     endif()
 
     message(STATUS "DB2API_LIBRARY                 : " ${DB2API_LIBRARY})
@@ -525,6 +328,7 @@ if (UNIX)
     display_pyarrow_var()
     include_directories(${NUMPY_OUT_HEADER})
     include_directories(${PYARROW_OUT_HEADER})
+    include_directories(${PROJECT_SOURCE_DIR})
 
 
     target_link_libraries(${PROJECT_NAME} ${Python3_LIBRARIES})
@@ -533,6 +337,27 @@ if (UNIX)
     find_library(LIBARROW_PYTHON HINTS  ${PYARROW_OUT_LIBRARY_LOC} NAMES arrow_python REQUIRED) #HINTS  ${PYARROW_OUT_LIBRARY_LOC}  
     find_library(LIBARROW        HINTS  ${PYARROW_OUT_LIBRARY_LOC} NAMES arrow REQUIRED)
     find_library(LIBPARQUET      HINTS  ${PYARROW_OUT_LIBRARY_LOC} NAMES parquet REQUIRED)
+
+    #if (PYARROW_RES_LIBRARY_LOC EQUAL 0)
+    #    target_link_libraries(${PROJECT_NAME}
+    #    ${PYARROW_OUT_LIBRARY_LOC}\\parquet.juana
+    #    )
+    #    foreach (PYARROW_OUT_LIBRARY_L ${PYARROW_OUT_LIBRARIES})
+    #        target_link_libraries(${PROJECT_NAME} ${PYARROW_OUT_LIBRARY_LOC}\\${PYARROW_OUT_LIBRARY_L}.juana)
+    #        message(STATUS "adding link library            : " ${PYARROW_OUT_LIBRARY_LOC}\\${PYARROW_OUT_LIBRARY_L}.juana)
+    #    endforeach()
+    #
+    #    message(STATUS "adding link library            : " ${PYARROW_OUT_LIBRARY_LOC}\\parquet.juana)
+    #endif()
+
+    #if (${LIBARROW_PYTHON} STREQUAL "LIBARROW_PYTHON-NOTFOUND")
+    #    message(WARNING "LIBARROW_PYTHON = LIBARROW_PYTHON-NOTFOUND")
+    #    if (NOT APPLE)
+    #        if (EXISTS "/home/jorge/.local/lib/python3.7/site-packages/pyarrow/libarrow_python.so")
+    #            set(LIBARROW_PYTHON "/home/jorge/.local/lib/python3.7/site-packages/pyarrow/libarrow_python.so")
+    #        endif()
+    #    endif()
+    #endif()
 
     message(STATUS "LIBDL                          : " ${LIBDL})
     message(STATUS "LIBARROW                       : " ${LIBARROW})
@@ -548,7 +373,6 @@ if (UNIX)
     display_pyarrow_h()
 
     if (APPLE)
-        include_directories(/Users/mac/miniconda3/include)
         include_directories(osx)
         include_directories(include)
         target_link_libraries(${PROJECT_NAME}

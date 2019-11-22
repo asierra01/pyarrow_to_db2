@@ -18,62 +18,111 @@ void py11_set_DB2_TIMESTAMP(
 
 }
 
-/*
-void set_DB2_TIMESTAMP(
-    PyObject * pySNAPSHOTTIMESTAMP,
-    SQL_TIMESTAMP_STRUCT &out_snapshottimestamp)
+/*  wrapped python_get_db_size function */
+PYOBJ_PTR python_get_db_size(PYOBJ_PTR self, PYOBJ_PTR args)
 {
-    PyObject *arglist = NULL;
-    PyObject *pyFunction = NULL;
-    PyObject *py_result = NULL;
-    pyFunction = PyObject_GetAttrString(pySNAPSHOTTIMESTAMP, (char *)"__setattr__"); // New reference.
-    arglist = Py_BuildValue("(si)",  "year", out_snapshottimestamp.year);
-    py_result = PyObject_CallObject(pyFunction, arglist);
-    Py_XDECREF(arglist);
-    Py_XDECREF(py_result);
+    ERROR_VAR
+    int ret;
+    PYOBJ_PTR py_conn_res = nullptr;
+    conn_handle* conn_res = nullptr;
+    PYOBJ_PTR py_mylist;
+    PYOBJ_PTR py_datetime;
+    SQLBIGINT            out_DATABASESIZE = 0;
+    SQLBIGINT            out_DATABASECAPACITY = 0;
+    SQL_TIMESTAMP_STRUCT out_snapshottimestamp = {};
 
-    arglist = Py_BuildValue("(si)",  "month", out_snapshottimestamp.month);
-    py_result = PyObject_CallObject(pyFunction, arglist);
-    Py_XDECREF(arglist);
-    Py_XDECREF(py_result);
 
-    arglist = Py_BuildValue("(si)", "day", out_snapshottimestamp.day);
-    py_result = PyObject_CallObject(pyFunction, arglist);
-    Py_XDECREF(arglist);
-    Py_XDECREF(py_result);
+    /*
 
-    arglist = Py_BuildValue("(si)", "hour", out_snapshottimestamp.hour);
-    py_result = PyObject_CallObject(pyFunction, arglist);
-    Py_XDECREF(arglist);
-    Py_XDECREF(py_result);
+        possible Python call : python_get_db_size(conn)
+    */
+    if (!PyArg_ParseTuple(args, "O",
+        &py_conn_res))
+    {
+        PyErr_Format(PyExc_ValueError,
+            "parameters count must be one ibm_db.IBM_DBConnection");
+        return NULL;
+    }
 
-    arglist = Py_BuildValue("(si)", "minute", out_snapshottimestamp.minute);
-    py_result = PyObject_CallObject(pyFunction, arglist);
-    Py_XDECREF(arglist);
-    Py_XDECREF(py_result);
+    if (py_conn_res == NULL)
+    {
+        PyErr_Format(PyExc_TypeError,
+            "Supplied connection object Parameter is invalid NULL it should be of type ibm_db.IBM_DBConnection");
+        return NULL;
 
-    arglist = Py_BuildValue("(si)", "second", out_snapshottimestamp.second);
-    py_result = PyObject_CallObject(pyFunction, arglist);
-    Py_XDECREF(arglist);
-    Py_XDECREF(py_result);
+    }
+    if (py_conn_res == Py_None)
+    {
+        PyErr_Format(PyExc_TypeError,
+            "Supplied connection object Parameter is invalid '%s' it should be of type ibm_db.IBM_DBConnection",
+            Py_TYPE(py_conn_res)->tp_name);
+        return NULL;
 
-    arglist = Py_BuildValue("(si)", "fraction", out_snapshottimestamp.fraction);
-    py_result = PyObject_CallObject(pyFunction, arglist);
-    Py_XDECREF(arglist);
-    Py_XDECREF(py_result);
+    }
 
-    Py_XDECREF(pyFunction);
+    if (strcmp(Py_TYPE(py_conn_res)->tp_name, IBM_DBConnection) != 0)
+    {
+        PyErr_Format(PyExc_TypeError,
+            "Supplied connection object Parameter is invalid '%s' it should be of type ibm_db.IBM_DBConnection",
+            Py_TYPE(py_conn_res)->tp_name);
+        return NULL;
+    }
+    else
+        conn_res = (conn_handle*)py_conn_res;
+
+    out_DATABASESIZE = 0;
+    out_DATABASECAPACITY = 0;
+    if (conn_res != nullptr)
+    {
+        ret = get_db_size(
+            //conn_res->henv,
+            conn_res->hdbc,
+            &out_DATABASESIZE,
+            &out_DATABASECAPACITY,
+            &out_snapshottimestamp,
+            ERROR_VAR_PARAM_1);
+        SPCLIENT_ERROR_MESSAGE
+    }
+
+    
+    //LOG_INFO("here %d-%d-%d  %d-%d %ld", 
+    //    out_snapshottimestamp.year, 
+    //    out_snapshottimestamp.month, 
+    //    out_snapshottimestamp.day,
+    //    out_snapshottimestamp.hour,
+    //    out_snapshottimestamp.second, 
+    //    out_snapshottimestamp.fraction/ 1000);
+        
+
+    PyDateTime_IMPORT;
+    py_datetime = PyDateTime_FromDateAndTime(
+        (int)out_snapshottimestamp.year,
+        (int)out_snapshottimestamp.month,
+        (int)out_snapshottimestamp.day,
+        (int)out_snapshottimestamp.hour,
+        (int)out_snapshottimestamp.minute,
+        (int)out_snapshottimestamp.second,
+        (int)(out_snapshottimestamp.fraction / 1000)); // Return value: New reference.
+   
+
+
+    py_mylist = Py_BuildValue("[LLO]", 
+        out_DATABASESIZE, 
+        out_DATABASECAPACITY, 
+        py_datetime); // L as long long = int64 = SQLBIGINT //  result is a new reference
+    return py_mylist;
 
 }
-*/
 
-/*  wrapped python_call_get_db_size function */
-PYOBJ_PTR python_call_get_db_size(PYOBJ_PTR self, PYOBJ_PTR args)
+
+/*  wrapped python_get_db_size function */
+PYOBJ_PTR python_get_db_size_with_timestamp(PYOBJ_PTR self, PYOBJ_PTR args)
 {
-    int rc;
-    PYOBJ_PTR py_conn_res = NULL;
+    ERROR_VAR
+    int ret;
+    PYOBJ_PTR py_conn_res = nullptr;
     PYOBJ_PTR pySNAPSHOTTIMESTAMP;
-    conn_handle *conn_res;
+    conn_handle *conn_res = NULL;
     PYOBJ_PTR py_mylist;
     SQLBIGINT            out_DATABASESIZE;
     SQLBIGINT            out_DATABASECAPACITY;
@@ -86,28 +135,42 @@ PYOBJ_PTR python_call_get_db_size(PYOBJ_PTR self, PYOBJ_PTR args)
                                     self.mDb2_Cli.encode_utf8(self.mDb2_Cli.DB2_PASSWORD),
                                     self.mDb2_Cli.conn_options_autocommit_off)
 
-        possible Python call : python_call_get_db_size(conn, mylog.info, self.SNAPSHOTTIMESTAMP)
+        possible Python call : python_call_get_db_size(conn, self.SNAPSHOTTIMESTAMP)
     */
-    if (!PyArg_ParseTuple(args, "OOO", 
+    if (!PyArg_ParseTuple(args, "OO", 
         &py_conn_res, 
-        &mylog_info, 
         &pySNAPSHOTTIMESTAMP))
     {
         PyErr_Format(PyExc_ValueError, 
-            "parameters count must be three ibm_dbIBM_DBConnection, mylog.info and an instance of SNAPSHOTTIMESTAMP '%s'", 
-            "yes three parameters");
+            "parameters count must be two ibm_db.IBM_DBConnection, and an instance of DB2_TIMESTAMP ");
         return NULL;
+    }
+    if (pySNAPSHOTTIMESTAMP == NULL)
+    {
+        PyErr_Format(PyExc_TypeError,
+            "Supplied DB2_TIMESTAMP object Parameter is invalid NULL it should be of type 'DB2_TIMESTAMP'");
+        return NULL;
+
     }
 
     if (strcmp(Py_TYPE(pySNAPSHOTTIMESTAMP)->tp_name, "DB2_TIMESTAMP") != 0)
     {
         PyErr_Format( PyExc_TypeError,
                      "Supplied DB2_TIMESTAMP object Parameter is invalid '%s' it should be type 'DB2_TIMESTAMP'",
-                     Py_TYPE(py_conn_res)->tp_name );
+                     Py_TYPE(pySNAPSHOTTIMESTAMP)->tp_name );
         return NULL;
     }
 
-    if (strcmp(Py_TYPE(py_conn_res)->tp_name, "ibm_db.IBM_DBConnection") != 0)
+    if (py_conn_res == NULL)
+    {
+        PyErr_Format(PyExc_TypeError,
+            "Supplied connection object Parameter is invalid NULL it should be of type ibm_db.IBM_DBConnection");
+        return NULL;
+
+    }
+
+    
+    if (strcmp(Py_TYPE(py_conn_res)->tp_name, IBM_DBConnection) != 0)
     {
         PyErr_Format( PyExc_TypeError,
                      "Supplied connection object Parameter is invalid '%s' it should be of type ibm_db.IBM_DBConnection",
@@ -117,32 +180,35 @@ PYOBJ_PTR python_call_get_db_size(PYOBJ_PTR self, PYOBJ_PTR args)
     else
         conn_res = (conn_handle *)py_conn_res;
 
+
     out_DATABASESIZE = 0;
     out_DATABASECAPACITY = 0;
-    rc = get_db_size(conn_res->henv, 
+    ret = get_db_size(//conn_res->henv, 
                      conn_res->hdbc,
                      &out_DATABASESIZE,
                      &out_DATABASECAPACITY,
-                     &out_snapshottimestamp );
-
-    //set_DB2_TIMESTAMP(pySNAPSHOTTIMESTAMP, out_snapshottimestamp);
+                     &out_snapshottimestamp,
+                     ERROR_VAR_PARAM_1);
+    SPCLIENT_ERROR_MESSAGE
     py11_set_DB2_TIMESTAMP(pySNAPSHOTTIMESTAMP, out_snapshottimestamp);
-
-    py_mylist = Py_BuildValue("[LL]", out_DATABASESIZE, out_DATABASECAPACITY); // L as long long = int64 = SQLBIGINT
+    py_mylist = Py_BuildValue("[LL]", 
+        out_DATABASESIZE, 
+        out_DATABASECAPACITY); // L as long long = int64 = SQLBIGINT // result is a new reference
     return py_mylist;
 
 }
 
 int get_db_size(
-SQLHANDLE henv,
-SQLHANDLE hdbc,
+//SQLHANDLE henv,
+SQLHDBC hdbc,
 SQLBIGINT    *out_DATABASESIZE,
 SQLBIGINT    *out_DATABASECAPACITY,
-SQL_TIMESTAMP_STRUCT *out_snapshottimestamp)
+SQL_TIMESTAMP_STRUCT *out_snapshottimestamp,
+ERROR_VAR_PARAM_DEF)
 {
   SQLRETURN    cliRC = SQL_SUCCESS;
   int          rc    = 0;
-  SQLHANDLE    hstmt; /* statement handle */
+  SQLHANDLE    hstmt = SQL_NULL_HSTMT; /* statement handle */
   SQLINTEGER   in_out_REFRESHWINDOW = 0;
   SQLINTEGER   len_out_snapshottimestamp = 0;
 
@@ -217,7 +283,6 @@ SQL_TIMESTAMP_STRUCT *out_snapshottimestamp)
   Py_END_ALLOW_THREADS;
 
   STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
-
 
   /* free the statement handle */
   cliRC = SQLFreeHandle(SQL_HANDLE_STMT, hstmt);

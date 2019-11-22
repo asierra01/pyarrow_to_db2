@@ -1,9 +1,6 @@
 #pragma once
 
-
-
 #ifndef WIN32
-
 #ifdef __cplusplus
 extern "C" {
 #endif

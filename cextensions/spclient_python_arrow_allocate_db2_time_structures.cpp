@@ -39,7 +39,7 @@ std::string struct_arrow_to_db2_time::to_string_as_date() const
 
 std::string struct_arrow_to_db2_time::to_string_as_time() const
 {
-    char buffer[100];
+    char buffer[100] = {};
 #ifdef WIN32
     _snprintf_s(buffer, 100, 100,
 #else
@@ -52,7 +52,7 @@ std::string struct_arrow_to_db2_time::to_string_as_time() const
 
 std::string struct_arrow_to_db2_time::to_string() const
 {
-    char buffer[100];
+    char buffer[100] = {};
 #ifdef WIN32
     _snprintf_s(buffer, 100, 100,
 #else
@@ -103,6 +103,24 @@ void MY_DICT::TimeToSQL_TIMESTAMP_STRUCT(
     p.fraction = item1.fraction;
 }
 
+void MY_DICT::TimeToSQL_TIMESTAMP_STRUCT_EXT_TZ(
+    size_t j,
+    const ARROW_TO_DB2_TIME& item1)
+{
+    SQL_TIMESTAMP_STRUCT_EXT_TZ& p = *((SQL_TIMESTAMP_STRUCT_EXT_TZ*)m_data_time + j);
+
+    p.year = item1.year;
+    p.month = item1.month;
+    p.day = item1.day;
+    p.hour = item1.hour;
+    p.minute = item1.min;
+    p.second = item1.sec;
+    p.fraction = item1.fraction;
+    p.timezone_hour = item1.timezone_hour;
+    p.timezone_minute = item1.timezone_minute;
+}
+
+
 void MY_DICT::TimeToSQL_DATE_STRUCT(
     size_t j,
     const ARROW_TO_DB2_TIME &item1)
@@ -124,6 +142,7 @@ void MY_DICT::TimeToTIME_STRUCT(
     p.second = item1.sec;
 }
 
+
 void MY_DICT::fill_date32()
 {
     VECT_ARROW_TO_DB2_TIME & v_Time = getVectorTime();
@@ -135,6 +154,8 @@ void MY_DICT::fill_date32()
         TimeToSQL_DATE_STRUCT(j, item1);
         j++;
     }
+    // once we consume the data in v_Time why keep the data in memory
+    v_Time.clear();
 }
 
 void MY_DICT::fill_date64()
@@ -148,6 +169,8 @@ void MY_DICT::fill_date64()
         TimeToSQL_DATE_STRUCT(j, item1);
         j++;
     }
+    // once we consume the data in v_Time why keep the data in memory
+    v_Time.clear();
 }
 
 void MY_DICT::fill_timestamp()
@@ -161,18 +184,40 @@ void MY_DICT::fill_timestamp()
         TimeToSQL_TIMESTAMP_STRUCT(j, item1);
         j++;
     }
+    // once we consume the data in v_Time why keep the data in memory
+    v_Time.clear();
 }
 
+// create a continuous array of SQL_TIMESTAMP_STRUCT_EXT_TZ used by the db2 load api if the column is timestamp with time zone 
+void MY_DICT::fill_timestamp_with_tz()
+{
+    VECT_ARROW_TO_DB2_TIME& v_Time = getVectorTime();
+    size_t vector_size = v_Time.size();
+    m_data_time = (SQL_TIMESTAMP_STRUCT_EXT_TZ*)calloc(vector_size, sizeof(SQL_TIMESTAMP_STRUCT_EXT_TZ));
+    size_t j = 0;
+    for (const ARROW_TO_DB2_TIME& item1 : v_Time)
+    {
+        TimeToSQL_TIMESTAMP_STRUCT_EXT_TZ(j, item1);
+        j++;
+    }
+    // once we consume the data in v_Time why keep the data in memory
+    v_Time.clear();
+}
+
+// create a continuous array of TIME_STRUCT used by the db2 load api if the column is TIME 
 void MY_DICT::fill_time()
 {
-    size_t vector_size = getVectorTime().size();
+    VECT_ARROW_TO_DB2_TIME& v_Time = getVectorTime();
+    size_t vector_size = v_Time.size();
     m_data_time = (TIME_STRUCT *)calloc(vector_size, sizeof(TIME_STRUCT));
     size_t j = 0;
-    for (const ARROW_TO_DB2_TIME &item1 : getVectorTime())
+    for (const ARROW_TO_DB2_TIME &item1 : v_Time)
     {
         TimeToTIME_STRUCT(j, item1);
         j++;
     }
+    // once we consume the data in v_Time why keep the data in memory
+    v_Time.clear();
 }
 
 

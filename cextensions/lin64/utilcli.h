@@ -52,12 +52,21 @@
 #define max(a,b) (a > b ? a : b)
 #endif
 
+#define ERROR_VAR \
+    SQLCHAR message[SQL_MAX_MESSAGE_LENGTH + 1] = {0}; \
+    SQLCHAR sqlstate[SQL_SQLSTATE_SIZE + 1] = {0};\
+    SQLINTEGER sqlcode = 0;
+
+#define ERROR_VAR_PARAM message, sqlstate, sqlcode
+#define ERROR_VAR_PARAM_1 message, sqlstate, &sqlcode
+#define ERROR_VAR_PARAM_DEF SQLCHAR *message, SQLCHAR *sqlstate, SQLINTEGER *sqlcode
+
 /* macro for environment handle checking */
 #define ENV_HANDLE_CHECK(henv, cliRC)              \
 if (cliRC != SQL_SUCCESS)                          \
 {                                                  \
   rc = HandleInfoPrint(SQL_HANDLE_ENV, henv,       \
-                       cliRC, __LINE__, __FILE__); \
+                       cliRC, __LINE__, __FILE__, ERROR_VAR_PARAM); \
   if (rc != 0) return rc;                          \
 }
 
@@ -66,7 +75,7 @@ if (cliRC != SQL_SUCCESS)                          \
 if (cliRC != SQL_SUCCESS)                          \
 {                                                  \
   rc = HandleInfoPrint(SQL_HANDLE_DBC, hdbc,       \
-                       cliRC, __LINE__, __FILE__); \
+                       cliRC, __LINE__, __FILE__, ERROR_VAR_PARAM); \
   if (rc != 0) return rc;                          \
 }
 
@@ -75,9 +84,9 @@ if (cliRC != SQL_SUCCESS)                          \
 if (cliRC != SQL_SUCCESS)                          \
 {                                                  \
   rc = HandleInfoPrint(SQL_HANDLE_STMT, hstmt,     \
-                       cliRC, __LINE__, __FILE__); \
-  if (rc == 2) StmtResourcesFree(hstmt);           \
-  if (rc != 0) TransRollback(hdbc);                \
+                       cliRC, __LINE__, __FILE__, ERROR_VAR_PARAM); \
+  if (rc == 2) StmtResourcesFree(hstmt, ERROR_VAR_PARAM);           \
+  if (rc != 0) TransRollback(hdbc, ERROR_VAR_PARAM);                \
   if (rc != 0) return rc;                          \
 }
 
@@ -87,9 +96,9 @@ if (cliRC != SQL_SUCCESS)                          \
 if (cliRC != SQL_SUCCESS)                          \
 {                                                  \
   rc = HandleInfoPrint(SQL_HANDLE_STMT, hstmt,     \
-                       cliRC, __LINE__, __FILE__); \
-  if (rc == 2) StmtResourcesFree(hstmt);           \
-  if (rc != 0) MultiConnTransRollback(henv);       \
+                       cliRC, __LINE__, __FILE__, ERROR_VAR_PARAM); \
+  if (rc == 2) StmtResourcesFree(hstmt, ERROR_VAR_PARAM);           \
+  if (rc != 0) MultiConnTransRollback(henv, ERROR_VAR_PARAM);       \
   if (rc != 0) return rc;                          \
 }
 
@@ -106,30 +115,28 @@ if (sqlca.sqlcode < 0)                             \
 if (cliRC != SQL_SUCCESS)                          \
 {                                                  \
   rc = HandleInfoPrint(SQL_HANDLE_STMT, hstmt,     \
-                       cliRC, __LINE__, __FILE__); \
-  if (rc == 2) StmtResourcesFree(hstmt);           \
+                       cliRC, __LINE__, __FILE__, ERROR_VAR_PARAM); \
+  if (rc == 2) StmtResourcesFree(hstmt, ERROR_VAR_PARAM);           \
 }
 
-/* functions used in ...CHECK_HANDLE macros */
-int HandleInfoPrint(SQLSMALLINT, SQLHANDLE, SQLRETURN, int, const char *);
-//void CLIAppCleanUp(SQLHANDLE *, SQLHANDLE a_hdbc[], int);
-int StmtResourcesFree(SQLHANDLE);
-void TransRollback(SQLHANDLE);
-void MultiConnTransRollback(SQLHANDLE);
 
-/* functions to check the number of command line arguments */
-//int CmdLineArgsCheck1(int, char *argv[], char *, char *, char *);
-//int CmdLineArgsCheck2(int, char *argv[], char *, char *, char *, char *);
-//int CmdLineArgsCheck3(int, char *argv[], char *, char *,
-//                      char *, char *, char *, char *);
 
-/* function used in DB2_API_CHECK */
-void SqlInfoPrint(char *, struct sqlca*, int, const char*);
+    /* functions used in ...CHECK_HANDLE macros */
+    int HandleInfoPrint(SQLSMALLINT htype, /* handle type identifier */
+        SQLHANDLE hndl, /* handle used by the CLI function */
+        SQLRETURN cliRC, /* return code of the CLI function */
+        int line,
+        const char* file,
+        ERROR_VAR_PARAM_DEF);
 
-/* other utility functions */
-int CLIAppInit(char *, char *, char *, SQLHANDLE *, SQLHANDLE *, SQLPOINTER);
-//int CLIAppTerm(SQLHANDLE *, SQLHANDLE *, char *);
-int StmtResultPrint(SQLHANDLE, SQLHANDLE);
+    //void CLIAppCleanUp(SQLHANDLE *, SQLHANDLE a_hdbc[], int);
+    int StmtResourcesFree(SQLHANDLE, ERROR_VAR_PARAM_DEF);
+    void TransRollback(SQLHANDLE, ERROR_VAR_PARAM_DEF);
+    void MultiConnTransRollback(SQLHANDLE, ERROR_VAR_PARAM_DEF);
+    void HandleLocationPrint(SQLRETURN cliRC, int line, const char* file);
+
+
+
 
 #endif
 

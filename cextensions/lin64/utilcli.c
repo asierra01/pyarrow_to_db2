@@ -60,18 +60,19 @@
 #include "utilcli.h"
 
 /* local functions for utilcli.c */
-void HandleLocationPrint(SQLRETURN, int, const char *);
-void HandleDiagnosticsPrint(SQLSMALLINT, SQLHANDLE);
+//void HandleLocationPrint(SQLRETURN, int, const char *);
+//void HandleDiagnosticsPrint(SQLSMALLINT, SQLHANDLE);
 
 /* funtion used in DB2_API_CHECK */
-void SqlInfoPrint(char *, struct sqlca*, int, const char*);
+//void SqlInfoPrint(const char *, struct sqlca*, int, const char*);
 
 /* outputs to screen unexpected occurrences with CLI functions */
 int HandleInfoPrint(SQLSMALLINT htype, /* handle type identifier */
                     SQLHANDLE hndl, /* handle used by the CLI function */
                     SQLRETURN cliRC, /* return code of the CLI function */
                     int line,
-                    const char *file)
+                    const char *file,
+                    ERROR_VAR_PARAM_DEF)
 {
   int rc = 0;
 
@@ -88,7 +89,7 @@ int HandleInfoPrint(SQLSMALLINT htype, /* handle type identifier */
     case SQL_ERROR:
       printf("\n--CLI ERROR--------------\n");
       HandleLocationPrint(cliRC, line, file);
-      HandleDiagnosticsPrint(htype, hndl);
+      HandleDiagnosticsPrint(htype, hndl, ERROR_VAR_PARAM);
       rc = 2;
       break;
     case SQL_SUCCESS_WITH_INFO:
@@ -121,11 +122,11 @@ void HandleLocationPrint(SQLRETURN cliRC, int line, const char *file)
 } /* HandleLocationPrint */
 
 void HandleDiagnosticsPrint(SQLSMALLINT htype, /* handle type identifier */
-                            SQLHANDLE hndl /* handle */ )
+                            SQLHANDLE hndl /* handle */ , ERROR_VAR_PARAM_DEF)
 {
-  SQLCHAR message[SQL_MAX_MESSAGE_LENGTH + 1];
-  SQLCHAR sqlstate[SQL_SQLSTATE_SIZE + 1];
-  SQLINTEGER sqlcode;
+  //SQLCHAR message[SQL_MAX_MESSAGE_LENGTH + 1];
+  //SQLCHAR sqlstate[SQL_SQLSTATE_SIZE + 1];
+  //SQLINTEGER sqlcode;
   SQLSMALLINT length, i;
 
   i = 1;
@@ -135,13 +136,13 @@ void HandleDiagnosticsPrint(SQLSMALLINT htype, /* handle type identifier */
                        hndl,
                        i,
                        sqlstate,
-                       &sqlcode,
+                       sqlcode,
                        message,
                        SQL_MAX_MESSAGE_LENGTH + 1,
                        &length) == SQL_SUCCESS)
   {
     printf("\n  SQLSTATE          = %s\n", sqlstate);
-    printf("  Native Error Code = %d\n", sqlcode);
+    printf("  Native Error Code = %d\n", *sqlcode);
     printf("%s\n", message);
     i++;
   }
@@ -151,14 +152,14 @@ void HandleDiagnosticsPrint(SQLSMALLINT htype, /* handle type identifier */
 
 /* free statement handles and print unexpected occurrences */
 /* this function is used in STMT_HANDLE_CHECK */
-int StmtResourcesFree(SQLHANDLE hstmt)
+int StmtResourcesFree(SQLHANDLE hstmt, ERROR_VAR_PARAM_DEF)
 {
   SQLRETURN cliRC = SQL_SUCCESS;
   int rc = 0;
 
   /* free the statement handle */
   cliRC = SQLFreeStmt(hstmt, SQL_UNBIND);
-  rc = HandleInfoPrint(SQL_HANDLE_STMT, hstmt, cliRC, __LINE__, __FILE__);
+  rc = HandleInfoPrint(SQL_HANDLE_STMT, hstmt, cliRC, __LINE__, __FILE__, ERROR_VAR_PARAM);
   if (rc != 0)
   {
     return 1;
@@ -166,7 +167,7 @@ int StmtResourcesFree(SQLHANDLE hstmt)
 
   /* free the statement handle */
   cliRC = SQLFreeStmt(hstmt, SQL_RESET_PARAMS);
-  rc = HandleInfoPrint(SQL_HANDLE_STMT, hstmt, cliRC, __LINE__, __FILE__);
+  rc = HandleInfoPrint(SQL_HANDLE_STMT, hstmt, cliRC, __LINE__, __FILE__, ERROR_VAR_PARAM);
   if (rc != 0)
   {
     return 1;
@@ -174,7 +175,7 @@ int StmtResourcesFree(SQLHANDLE hstmt)
 
   /* free the statement handle */
   cliRC = SQLFreeStmt(hstmt, SQL_CLOSE);
-  rc = HandleInfoPrint(SQL_HANDLE_STMT, hstmt, cliRC, __LINE__, __FILE__);
+  rc = HandleInfoPrint(SQL_HANDLE_STMT, hstmt, cliRC, __LINE__, __FILE__, ERROR_VAR_PARAM);
   if (rc != 0)
   {
     return 1;
@@ -185,7 +186,7 @@ int StmtResourcesFree(SQLHANDLE hstmt)
 
 /* rollback transactions on a single connection */
 /* this function is used in HANDLE_CHECK */
-void TransRollback(SQLHANDLE hdbc)
+void TransRollback(SQLHANDLE hdbc, ERROR_VAR_PARAM_DEF)
 {
   SQLRETURN cliRC = SQL_SUCCESS;
   int rc = 0;
@@ -194,7 +195,7 @@ void TransRollback(SQLHANDLE hdbc)
 
   /* end transactions on the connection */
   cliRC = SQLEndTran(SQL_HANDLE_DBC, hdbc, SQL_ROLLBACK);
-  rc = HandleInfoPrint(SQL_HANDLE_DBC, hdbc, cliRC, __LINE__, __FILE__);
+  rc = HandleInfoPrint(SQL_HANDLE_DBC, hdbc, cliRC, __LINE__, __FILE__, ERROR_VAR_PARAM);
   if (rc == 0)
   {
     printf("  The transaction rolled back.\n");
@@ -203,7 +204,7 @@ void TransRollback(SQLHANDLE hdbc)
 
 /* rollback transactions on mutiple connections */
 /* this function is used in HANDLE_CHECK */
-void MultiConnTransRollback(SQLHANDLE henv)
+void MultiConnTransRollback(SQLHANDLE henv, ERROR_VAR_PARAM_DEF)
 {
   SQLRETURN cliRC = SQL_SUCCESS;
   int rc = 0;
@@ -212,365 +213,18 @@ void MultiConnTransRollback(SQLHANDLE henv)
 
   /* end transactions on the connection */
   cliRC = SQLEndTran(SQL_HANDLE_ENV, henv, SQL_ROLLBACK);
-  rc = HandleInfoPrint(SQL_HANDLE_ENV, henv, cliRC, __LINE__, __FILE__);
+  rc = HandleInfoPrint(SQL_HANDLE_ENV, henv, cliRC, __LINE__, __FILE__, ERROR_VAR_PARAM);
   if (rc == 0)
   {
     printf("  The transactions are rolled back.\n");
   }
 } /* MultiConnTransRollback */
 
-/* check command line arguments */
-int CmdLineArgsCheck1(int argc,
-                      char *argv[],
-                      char dbAlias[],
-                      char user[],
-                      char pswd[])
-{
-  int rc = 0;
 
-  switch (argc)
-  {
-    case 1:
-      strcpy(dbAlias, "sample");
-      strcpy(user, "");
-      strcpy(pswd, "");
-      break;
-    case 2:
-      strcpy(dbAlias, argv[1]);
-      strcpy(user, "");
-      strcpy(pswd, "");
-      break;
-    case 4:
-      strcpy(dbAlias, argv[1]);
-      strcpy(user, argv[2]);
-      strcpy(pswd, argv[3]);
-      break;
-    default:
-      printf("\nUSAGE: %s [dbAlias [userid  passwd]]\n", argv[0]);
-      rc = 1;
-      break;
-  } /* endswitch */
-
-  return rc;
-} /* CmdLineArgsCheck1 */
-
-/* check command line arguments */
-int CmdLineArgsCheck2(int argc,
-                      char *argv[],
-                      char dbAlias[],
-                      char user[],
-                      char pswd[],
-                      char remoteNodeName[])
-{
-  int rc = 0;
-
-  switch (argc)
-  {
-    case 1:
-      strcpy(dbAlias, "sample");
-      strcpy(user, "");
-      strcpy(pswd, "");
-      strcpy(remoteNodeName, "");
-      break;
-    case 2:
-      strcpy(dbAlias, argv[1]);
-      strcpy(user, "");
-      strcpy(pswd, "");
-      strcpy(remoteNodeName, "");
-      break;
-    case 4:
-      strcpy(dbAlias, argv[1]);
-      strcpy(user, argv[2]);
-      strcpy(pswd, argv[3]);
-      strcpy(remoteNodeName, "");
-      break;
-    case 5:
-      strcpy(dbAlias, argv[1]);
-      strcpy(user, argv[2]);
-      strcpy(pswd, argv[3]);
-      strcpy(remoteNodeName, argv[4]);
-      break;
-    default:
-      printf("\nUSAGE: %s [dbAlias [userid passwd [remoteNodeName]]]\n",
-             argv[0]);
-      rc = 1;
-      break;
-  } /* endswitch */
-
-  return rc;
-} /* CmdLineArgsCheck2 */
-
-/* check command line arguments */
-int CmdLineArgsCheck3(int argc,
-                      char *argv[],
-                      char dbAlias1[],
-                      char dbAlias2[],
-                      char user1[],
-                      char pswd1[],
-                      char user2[],
-                      char pswd2[])
-{
-  int rc = 0;
-
-  switch (argc)
-  {
-    case 1:
-      strcpy(dbAlias1, "sample");
-      strcpy(dbAlias2, "sample2");
-      strcpy(user1, "");
-      strcpy(pswd1, "");
-      strcpy(user2, "");
-      strcpy(pswd2, "");
-      break;
-    case 3:
-      strcpy(dbAlias1, argv[1]);
-      strcpy(dbAlias2, argv[2]);
-      strcpy(user1, "");
-      strcpy(pswd1, "");
-      strcpy(user2, "");
-      strcpy(pswd2, "");
-      break;
-    case 5:
-      strcpy(dbAlias1, argv[1]);
-      strcpy(dbAlias2, argv[2]);
-      strcpy(user1, argv[3]);
-      strcpy(pswd1, argv[4]);
-      strcpy(user2, argv[3]);
-      strcpy(pswd2, argv[4]);
-      break;
-    case 7:
-      strcpy(dbAlias1, argv[1]);
-      strcpy(dbAlias2, argv[2]);
-      strcpy(user1, argv[3]);
-      strcpy(pswd1, argv[4]);
-      strcpy(user2, argv[5]);
-      strcpy(pswd2, argv[6]);
-      break;
-    default:
-      printf("\nUSAGE: %s "
-             "[dbAlias1 dbAlias2 [user1 pswd1 [user2 pswd2]]]\n",
-             argv[0]);
-      rc = 1;
-      break;
-  }
-
-  return rc;
-} /* CmdLineArgsCheck3 */
-
-/* initialize a CLI application by:
-     o  allocating an environment handle
-     o  allocating a connection handle
-     o  setting AUTOCOMMIT
-     o  connecting to the database */
-int CLIAppInit(char dbAlias[],
-               char user[],
-               char pswd[],
-               SQLHANDLE *pHenv,
-               SQLHANDLE *pHdbc,
-               SQLPOINTER autocommitValue)
-{
-  SQLRETURN cliRC = SQL_SUCCESS;
-  int rc = 0;
-
-  /* allocate an environment handle */
-  cliRC = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, pHenv);
-  if (cliRC != SQL_SUCCESS)
-  {
-    printf("\n--ERROR while allocating the environment handle.\n");
-    printf("  cliRC             = %d\n", cliRC);
-    printf("  line              = %d\n", __LINE__);
-    printf("  file              = %s\n", __FILE__);
-    return 1;
-  }
-
-  /* set attribute to enable application to run as ODBC 3.0 application */
-  cliRC = SQLSetEnvAttr(*pHenv,
-                     SQL_ATTR_ODBC_VERSION,
-                     (void *)SQL_OV_ODBC3,
-                     0);
-  ENV_HANDLE_CHECK(*pHenv, cliRC);
-
-  /* allocate a database connection handle */
-  cliRC = SQLAllocHandle(SQL_HANDLE_DBC, *pHenv, pHdbc);
-  ENV_HANDLE_CHECK(*pHenv, cliRC);
-  
-  /* set AUTOCOMMIT off or on */
-  cliRC = SQLSetConnectAttr(*pHdbc,
-                            SQL_ATTR_AUTOCOMMIT,
-                            autocommitValue,
-                            SQL_NTS);
-  DBC_HANDLE_CHECK(*pHdbc, cliRC);
-
-  printf("\n  Connecting to %s...\n", dbAlias);
-
-  /* connect to the database */
-  cliRC = SQLConnect(*pHdbc,
-                     (SQLCHAR *)dbAlias,
-                     SQL_NTS,
-                     (SQLCHAR *)user,
-                     SQL_NTS,
-                     (SQLCHAR *)pswd,
-                     SQL_NTS);
-  DBC_HANDLE_CHECK(*pHdbc, cliRC);
-  printf("  Connected to %s.\n", dbAlias);
-
-  return 0;
-} /* CLIAppInit */
-
-/* terminate a CLI application by:
-     o  disconnecting from the database
-     o  freeing the connection handle
-     o  freeing the environment handle */
-int CLIAppTerm(SQLHANDLE * pHenv, SQLHANDLE * pHdbc, char dbAlias[])
-{
-  SQLRETURN cliRC = SQL_SUCCESS;
-  int rc = 0;
-
-  printf("\n  Disconnecting from %s...\n", dbAlias);
-
-  /* disconnect from the database */
-  cliRC = SQLDisconnect(*pHdbc);
-  DBC_HANDLE_CHECK(*pHdbc, cliRC);
-
-  printf("  Disconnected from %s.\n", dbAlias);
-
-  /* free connection handle */
-  cliRC = SQLFreeHandle(SQL_HANDLE_DBC, *pHdbc);
-  DBC_HANDLE_CHECK(*pHdbc, cliRC);
-
-  /* free environment handle */
-  cliRC = SQLFreeHandle(SQL_HANDLE_ENV, *pHenv);
-  ENV_HANDLE_CHECK(*pHenv, cliRC);
-
-  return 0;
-} /* CLIAppTerm */
-
-/* output result sets */
-int StmtResultPrint(SQLHANDLE hstmt, SQLHANDLE hdbc)
-{
-  SQLRETURN cliRC = SQL_SUCCESS;
-  int rc = 0;
-
-  SQLSMALLINT i; /* index */
-  SQLSMALLINT nResultCols; /* variable for SQLNumResultCols */
-  SQLCHAR colName[32]; /* variables for SQLDescribeCol  */
-  SQLSMALLINT colNameLen;
-  SQLSMALLINT colType;
-  SQLUINTEGER colSize;
-  SQLSMALLINT colScale;
-  SQLINTEGER colDataDisplaySize; /* maximum size of the data */
-  SQLINTEGER colDisplaySize[MAX_COLUMNS]; /* maximum size of the column */
-
-  struct
-  {
-    SQLCHAR *buff;
-    SQLINTEGER len;
-    SQLINTEGER buffLen;
-  }
-  outData[MAX_COLUMNS]; /* variable to read the results */
-
-  /* identify the output columns */
-  cliRC = SQLNumResultCols(hstmt, &nResultCols);
-  STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
-
-  printf("\n");
-  for (i = 0; i < nResultCols; i++)
-  {
-
-    /* return a set of attributes for a column */
-    cliRC = SQLDescribeCol(hstmt,
-                           (SQLSMALLINT)(i + 1),
-                           colName,
-                           sizeof(colName),
-                           &colNameLen,
-                           &colType,
-                           &colSize,
-                           &colScale,
-                           NULL);
-
-    STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
-    
-    /* get display size for column */
-    cliRC = SQLColAttribute(hstmt,
-                            (SQLSMALLINT)(i + 1),
-                            SQL_DESC_DISPLAY_SIZE,
-                            NULL,
-                            0,
-                            NULL,
-                            &colDataDisplaySize);
-    STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
-
-    /* set "column display size" to max of "column data display size",
-       and "column name length", plus at least one space between columns */
-    colDisplaySize[i] = max(colDataDisplaySize, colNameLen) + 1;
-
-    /* print the column name */
-    printf("%-*.*s",
-           (int)colDisplaySize[i], (int)colDisplaySize[i], colName);
-
-    /* set "output data buffer length" to "column data display size"
-       plus one byte for the null terminator */
-    outData[i].buffLen = colDataDisplaySize + 1;
-
-    /* allocate memory to bind column */
-    outData[i].buff = (SQLCHAR *)malloc((int)outData[i].buffLen);
-
-    /* bind columns to program variables, converting all types to CHAR */
-    cliRC = SQLBindCol(hstmt,
-                       (SQLSMALLINT)(i + 1),
-                       SQL_C_CHAR,
-                       outData[i].buff,
-                       outData[i].buffLen,
-                       &outData[i].len);
-    STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
-  }
-
-  printf("\n");
-  /* fetch each row and display */
-  cliRC = SQLFetch(hstmt);
-  if (cliRC == SQL_NO_DATA_FOUND)
-  {
-    printf("\n  Data not found.\n");
-  }
-  
-  while (cliRC == SQL_SUCCESS || cliRC == SQL_SUCCESS_WITH_INFO)
-  {
-    for (i = 0; i < nResultCols; i++)
-    {
-      /* check for NULL data */
-      if (outData[i].len == SQL_NULL_DATA)
-      {
-        printf("%-*.*s",
-               (int)colDisplaySize[i], (int)colDisplaySize[i], "NULL");
-      }
-      else
-      {
-        /* print outData for this column */
-        printf("%-*.*s",
-               (int)colDisplaySize[i],
-               (int)colDisplaySize[i], outData[i].buff);
-      }
-    } /* for all columns in this row  */
-
-    printf("\n");
-
-    /* fetch next row */
-    cliRC = SQLFetch(hstmt);
-    STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
-  } /* while rows to fetch */
-
-  /* free data buffers */
-  for (i = 0; i < nResultCols; i++)
-  {
-    free(outData[i].buff);
-  }
-
-  return rc;
-} /* StmtResultPrint */
 
 /* prints the warning/error details including file name, line number,
    sqlcode and SQLSTATE. */
-void SqlInfoPrint(char *appMsg, struct sqlca *pSqlca, int line, const char *file)
+void SqlInfoPrint(const char *appMsg, struct sqlca *pSqlca, int line, const char *file)
 {
   int rc = 0;
   char sqlInfo[1024];  /* string to store all the error information */

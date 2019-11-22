@@ -13,6 +13,8 @@ struct struct_arrow_to_db2_time
     int hour;
     int min;
     int sec;
+    int timezone_hour;
+    int timezone_minute;
     unsigned long fraction;
 
     struct_arrow_to_db2_time();
@@ -110,28 +112,30 @@ public:
     VECT_ARROW_TO_DB2_TIME& getVectorTime();
 
     void TimeToSQL_TIMESTAMP_STRUCT(size_t j, const ARROW_TO_DB2_TIME& item1);
+    void TimeToSQL_TIMESTAMP_STRUCT_EXT_TZ(size_t j, const ARROW_TO_DB2_TIME& item1);
     void TimeToSQL_DATE_STRUCT(size_t j, const ARROW_TO_DB2_TIME& item1);
     void TimeToTIME_STRUCT(size_t j, const ARROW_TO_DB2_TIME& item1);
 
     void fill_date32();
     void fill_date64();
     void fill_timestamp();
+    void fill_timestamp_with_tz();
     void fill_time();
 
-    MY_DICT() = delete;
+    MY_DICT() = delete;// no default construct
 
     // construct a MY_DICT instance based on arrow vector type
     // field_name, type as a string
     MY_DICT(arrow::Type::type vector_type,
-        const string& field_name,
-        const string& type_string);
+            const string& field_name,
+            const string& type_string);
 
     // construct and return a MY_DICT instance based on arrow vector type
     // field_name, type as a string
-    MY_DICT* get_MY_DICT(
-        arrow::Type::type vector_type,
-        const string& field_name,
-        const string& type_string);
+    //MY_DICT* get_MY_DICT(
+    //    arrow::Type::type vector_type,
+    //    const string& field_name,
+    //    const string& type_string);
 
     // return the vector size
     size_t size();

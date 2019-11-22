@@ -8,12 +8,12 @@
 using namespace arrow;
 using namespace py11::literals;
 
-static int func_registered_set_table_describe_dict = 0;
+static int func_registered_get_table_describe_dict = 0;
 
 void register_table_dict()
 {
     string set_table_col = R"(
-def set_table_describe_dict():
+def get_table_describe_dict():
     from texttable import Texttable
     table = Texttable()
     table.set_deco(Texttable.HEADER)
@@ -27,25 +27,41 @@ def set_table_describe_dict():
     table.set_cols_align(['l', 'l', 'l', 'l', 'l', 'l'])  
     table.header(['line_no_funcname',
                   'ARROW Type',
-                  'name',
+                  'column type',
                   'column name',
                   'size',
                   'chunks'])
-    table.set_cols_width([30, 18, 22, 22, 20, 10])  
+    table.set_cols_width([30, 18, 28, 30, 20, 10])  
  
     return table
 )";
-    if (func_registered_set_table_describe_dict == 0)
+    if (func_registered_get_table_describe_dict == 0)
     {
 
         try
         {
+            py11::function py_get_table_describe_dict;
+            PyObject* main_module = PyImport_AddModule("__main__"); //Borrowed reference. 
+            PyObject* main_dict = PyModule_GetDict(main_module);    //Borrowed reference. same as main_module.__dict__ 
             py11::exec(set_table_col.c_str());
-            func_registered_set_table_describe_dict = 1;
+            py_get_table_describe_dict = py11::reinterpret_borrow<py11::function>(py11::globals()["get_table_describe_dict"]);
+
+            py11::exec(set_table_col.c_str());
+            int ret = PyDict_SetItemString(main_dict,
+                "get_table_describe_dict",
+                py_get_table_describe_dict.ptr());
+            //print_mylog_info("trying PyModule_AddObject done");
+            if (ret != 0)
+            {
+                LOG_INFO("PyDict_SetItemString ret %d", ret);
+                return;
+            }
+
+            func_registered_get_table_describe_dict = 1;
         }
         catch (py11::error_already_set & e)
         {
-            LOG_INFO("py::exec  %s", e.what());
+            LOG_INFO("py::exec error_already_set '%s'", e.what());
             return;
         }
     }
@@ -54,37 +70,38 @@ def set_table_describe_dict():
 
 py11::object get_table_dict()
 {
-    py11::object py_set_table_describe_col;
+    py11::function py_get_table_describe_dict;
     int err = 0;
 
-    if (func_registered_set_table_describe_dict == 0)
+    if (func_registered_get_table_describe_dict == 0)
         register_table_dict();
 
     try
     {
-        py_set_table_describe_col = py11::globals()["set_table_describe_dict"];
-        py_set_table_describe_col.inc_ref();
-        return py_set_table_describe_col();
+        py_get_table_describe_dict = 
+            py11::reinterpret_borrow<py11::function>(py11::globals()["get_table_describe_dict"]);
+        return py_get_table_describe_dict();
     }
     catch (py11::error_already_set & e)
     {
         err = 1;
-        LOG_INFO("set_table_describe_dict  %s", e.what());
+        LOG_INFO("get_table_describe_dict error_already_set '%s'", e.what());
 
     }
 
     if (err == 1)
     {
-        func_registered_set_table_describe_dict = 0;
+        func_registered_get_table_describe_dict = 0;
         register_table_dict();
         try
         {
-            py_set_table_describe_col = py11::globals()["set_table_describe_dict"];
-            return py_set_table_describe_col();
+            py_get_table_describe_dict = 
+                py11::reinterpret_borrow<py11::function>(py11::globals()["get_table_describe_dict"]);
+            return py_get_table_describe_dict();
         }
         catch (py11::error_already_set & e)
         {
-            LOG_INFO("set_table_describe_dict  %s", e.what());
+            LOG_INFO("get_table_describe_dict error_already_set '%s'", e.what());
             return py11::cast<py11::none>(Py_None);
 
         }
@@ -109,22 +126,24 @@ void log_dic(
     else
         return;
 
+    //LOG_INFO("column type '%s'", c->data()->type()->ToString().c_str());
+
     string arrow_type = my_dict_arrow()[dict.vector_type];
     string size_str   = "'{:,}'"_s.format(dict.size());
-    string field_name = "'{}'"_s.format(c->name());
+    string field_name = "'{}'"_s.format(dict.field_name);
 
     string line_funcname = "{} {}"_s.format(line, func_name);
     py11::list my_row  = py11::reinterpret_borrow<py11::list>(
         Py_BuildValue("[sssssi]",
         line_funcname.c_str(),
         arrow_type.c_str(),
-        c->data()->type()->ToString().c_str(),
+        c->type()->ToString().c_str(),
         field_name.c_str(),
         size_str.c_str(),
-        c->data()->num_chunks()));
+        c->num_chunks()));
 
     if (!py_table.is_none())
-        py_table.attr("add_row")(my_row);
+        auto pyret = py_table.attr("add_row")(my_row);
     else
         LOG_INFO("py_table is None");
 }
@@ -135,9 +154,9 @@ void print_string(
 {
     std::shared_ptr<arrow::StringArray> array;
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
-        array = std::static_pointer_cast<StringArray> (c->data()->chunk(chunk));
+        array = std::static_pointer_cast<StringArray> (c->chunk(chunk));
         for (int64_t i = 0; i < array->length(); i++)
         {
             int32_t  out_length = 0;
@@ -160,9 +179,9 @@ void print_string(
     memset(blank_pads, 0, dict->max_size_string);
 
     dict->m_v_8_string.reserve(dict->max_size_string * c->length());
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
-        array = std::static_pointer_cast<StringArray> (c->data()->chunk(chunk));
+        array = std::static_pointer_cast<StringArray> (c->chunk(chunk));
 
         for (int64_t i = 0; i < array->length(); i++)
         {
@@ -215,9 +234,9 @@ void print_binary(
 {
     std::shared_ptr<arrow::BinaryArray> array;
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
-        array = std::static_pointer_cast<BinaryArray> (c->data()->chunk(chunk));
+        array = std::static_pointer_cast<BinaryArray> (c->chunk(chunk));
         for (int64_t i = 0; i < array->length(); i++)
         {
             int32_t  out_length = 0;
@@ -236,9 +255,9 @@ void print_binary(
     memset((void * )pad, 0, dict->max_size_string);
 
     dict->m_v_8_string.reserve(dict->max_size_string * c->length());
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
-        array = std::static_pointer_cast<BinaryArray> (c->data()->chunk(chunk));
+        array = std::static_pointer_cast<BinaryArray> (c->chunk(chunk));
 
         for (int64_t i = 0; i < array->length(); i++)
         {
@@ -293,17 +312,22 @@ void print_fixed_size_binary(
     MY_DICT* dict)
 {
     std::shared_ptr<arrow::FixedSizeBinaryArray> array = 
-        std::static_pointer_cast<FixedSizeBinaryArray> (c->data()->chunk(0));
+        std::static_pointer_cast<FixedSizeBinaryArray> (c->chunk(0));
     Py_BEGIN_ALLOW_THREADS;
     
     dict->max_size_string = array->byte_width();
     char* pad = (char*)malloc(dict->max_size_string);
-    memset((void*)pad, 0, dict->max_size_string);
+    if (pad != NULL)
+        memset((void*)pad, 0, dict->max_size_string);
+    else
+    {
+        printf("Error, could not allocate memory size %d", dict->max_size_string);
+    }
 
     dict->m_v_8_string.reserve(dict->max_size_string * c->length());
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
-        array = std::static_pointer_cast<FixedSizeBinaryArray> (c->data()->chunk(chunk));
+        array = std::static_pointer_cast<FixedSizeBinaryArray> (c->chunk(chunk));
 
         for (int64_t i = 0; i < array->length(); i++)
         {
@@ -339,9 +363,9 @@ void print_int64(
 
 
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
-        int64_array = std::static_pointer_cast<Int64Array>(c->data()->chunk(chunk));
+        int64_array = std::static_pointer_cast<Int64Array>(c->chunk(chunk));
         const Int64Array::value_type* data0 = int64_array->raw_values();
         v_64.insert(v_64.end(), data0, data0 + int64_array->length());
 
@@ -360,9 +384,9 @@ void print_uint64(
 
 
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
-        uint64_array = std::static_pointer_cast<UInt64Array>(c->data()->chunk(chunk));
+        uint64_array = std::static_pointer_cast<UInt64Array>(c->chunk(chunk));
         const UInt64Array::value_type * data0 = uint64_array->raw_values();
         v_u64.insert(v_u64.end(), data0, data0 + uint64_array->length());
 
@@ -383,9 +407,9 @@ void print_date64(
     v_db2_time.reserve(c->length());
     //date64[ms]
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
-        date64_array = std::static_pointer_cast<Date64Array>(c->data()->chunk(chunk));
+        date64_array = std::static_pointer_cast<Date64Array>(c->chunk(chunk));
         for (int64_t i = 0; i < date64_array->length(); i++)
         {
             arrow::Date64Array::value_type  v = date64_array->raw_values()[i];
@@ -418,17 +442,20 @@ void print_time32(
     std::shared_ptr<arrow::Time32Array> array;
     ARROW_TO_DB2_TIME t1;
     TimeUnit::type unit = TimeUnit::SECOND;
-    string type = c->data()->type()->ToString();
+    string type = c->type()->ToString();
     v.reserve(c->length());
+
     if (type == "time32[ms]")
         unit = TimeUnit::MILLI;
     else if (type == "time32[s]")
         unit = TimeUnit::SECOND;
+    else
+        LOG_INFO("Error Dont know what time32 to use");
 
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
-        array = std::static_pointer_cast<Time32Array>(c->data()->chunk(chunk));
+        array = std::static_pointer_cast<Time32Array>(c->chunk(chunk));
         for (int64_t i = 0; i < array->length(); i++)
         {
             arrow::Time32Array::value_type  v_1 = array->raw_values()[i];
@@ -471,17 +498,18 @@ void print_time64(
     std::shared_ptr<arrow::Time64Array> time64_array;
     ARROW_TO_DB2_TIME t1;
     TimeUnit::type unit = TimeUnit::MICRO;
-    string type = c->data()->type()->ToString();
+    string type = c->type()->ToString();
     v.reserve(c->length());
-    if (type == "time64[us]")
+
+    if (type.find("time64[us") != string::npos) 
         unit = TimeUnit::MICRO;
-    else if (type == "time64[ns]")
+    else if (type.find("time64[ns") != string::npos)
         unit = TimeUnit::NANO;
 
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
-        time64_array = std::static_pointer_cast<Time64Array>(c->data()->chunk(chunk));
+        time64_array = std::static_pointer_cast<Time64Array>(c->chunk(chunk));
         chunk++;
         for (int64_t i = 0; i < time64_array->length(); i++)
         {
@@ -520,17 +548,17 @@ void print_date32(
     std::shared_ptr<arrow::Date32Array> date32_array;
     ARROW_TO_DB2_TIME t1;
     int unit;
-    std::string type = c->data()->type()->ToString();
+    std::string type = c->type()->ToString();
     v_db2_time.reserve(c->length());
     if (type == "date32[day]")
         unit = 1;
     else
-        printf("error dont what unit for date32 %s\n", type.c_str());
+        LOG_INFO("error dont what unit for date32 %s\n", type.c_str());
     //printf("type %s\n", type.c_str());
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
-        date32_array = std::static_pointer_cast<Date32Array>(c->data()->chunk(chunk));
+        date32_array = std::static_pointer_cast<Date32Array>(c->chunk(chunk));
         for (int64_t i = 0; i < date32_array->length(); i++)
         {
 
@@ -555,10 +583,10 @@ void print_int32(
 {
     VECT_32 &v_32 = *dict;
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
         std::shared_ptr<Int32Array> i32_array = 
-            std::static_pointer_cast<Int32Array> (c->data()->chunk(chunk));
+            std::static_pointer_cast<Int32Array> (c->chunk(chunk));
         const Int32Array::value_type * data0 = i32_array->raw_values();
         v_32.insert(v_32.end(), data0, data0 + i32_array->length());
 
@@ -573,9 +601,9 @@ void print_int16(
 {
     VECT_16& v_16 = *dict;
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
-        std::shared_ptr<Int16Array> i16_array = std::static_pointer_cast<Int16Array> (c->data()->chunk(chunk));
+        std::shared_ptr<Int16Array> i16_array = std::static_pointer_cast<Int16Array> (c->chunk(chunk));
         const Int16Array::value_type* data0 = i16_array->raw_values();
         v_16.insert(v_16.end(), data0, data0 + i16_array->length());
 
@@ -590,10 +618,10 @@ void print_uint16(
 {
     VECT_U16& v_u16 = *dict;
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
         std::shared_ptr<UInt16Array> i16_array = 
-            std::static_pointer_cast<UInt16Array> (c->data()->chunk(chunk));
+            std::static_pointer_cast<UInt16Array> (c->chunk(chunk));
         const UInt16Array::value_type* data0 = i16_array->raw_values();
         v_u16.insert(v_u16.end(), data0, data0 + i16_array->length());
 
@@ -608,10 +636,10 @@ void print_uint32(
 {
     VECT_U32& v_U32 = *dict;
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
         std::shared_ptr<UInt32Array> ui32_array = 
-            std::static_pointer_cast<UInt32Array> (c->data()->chunk(chunk));
+            std::static_pointer_cast<UInt32Array> (c->chunk(chunk));
         const UInt32Array::value_type * data0 = ui32_array->raw_values();
         v_U32.insert(v_U32.end(), data0, data0 + ui32_array->length());
 
@@ -626,10 +654,10 @@ void print_float(
 {
     VECT_FLOAT &f = dict->getFloat();
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
         std::shared_ptr<arrow::FloatArray> f_array = 
-            std::static_pointer_cast<FloatArray> (c->data()->chunk(chunk));
+            std::static_pointer_cast<FloatArray> (c->chunk(chunk));
         const FloatArray::value_type * data0 = f_array->raw_values();
         f.insert(f.end(), data0, data0 + f_array->length());
 
@@ -643,10 +671,10 @@ void print_half_float(
 {
     VECT_FLOAT &f = dict->getFloat();
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
         std::shared_ptr<arrow::HalfFloatArray> f_array =
-            std::static_pointer_cast<HalfFloatArray> (c->data()->chunk(chunk));
+            std::static_pointer_cast<HalfFloatArray> (c->chunk(chunk));
         const HalfFloatArray::value_type * data0 = f_array->raw_values();
         f.insert(f.end(), data0, data0 + f_array->length());
 
@@ -797,10 +825,10 @@ void print_decimal(
 
     dict->m_v_8_string.reserve(MAX_DIGITS  * c->length());
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
         std::shared_ptr<arrow::Decimal128Array> f_array =
-            std::static_pointer_cast<arrow::Decimal128Array> (c->data()->chunk(chunk));
+            std::static_pointer_cast<arrow::Decimal128Array> (c->chunk(chunk));
         //dict->max_size_string = f_array->byte_width(); //16
         for (int64_t i = 0; i < f_array->length(); i++)
         {
@@ -830,9 +858,9 @@ void print_int8(
 {
     VECT_8 &v_8 = *dict;
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
-        std::shared_ptr<arrow::Int8Array> i8_array = std::static_pointer_cast<Int8Array> (c->data()->chunk(chunk));
+        std::shared_ptr<arrow::Int8Array> i8_array = std::static_pointer_cast<Int8Array> (c->chunk(chunk));
         const Int8Array::value_type * data0 = i8_array->raw_values();
         v_8.insert(v_8.end(), data0, data0 + i8_array->length());
 
@@ -846,9 +874,9 @@ void print_uint8(
 {
     VECT_U8& v_8 = *dict;
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
-        std::shared_ptr<UInt8Array> i8_array = std::static_pointer_cast<UInt8Array> (c->data()->chunk(chunk));
+        std::shared_ptr<UInt8Array> i8_array = std::static_pointer_cast<UInt8Array> (c->chunk(chunk));
         const UInt8Array::value_type* data0 = i8_array->raw_values();
         v_8.insert(v_8.end(), data0, data0 + i8_array->length());
 
@@ -863,9 +891,9 @@ void print_bool(
     VECT_8 &v_8 = *dict;
 
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
-        std::shared_ptr<BooleanArray>  bool_array = std::static_pointer_cast<BooleanArray>(c->data()->chunk(chunk));
+        std::shared_ptr<BooleanArray>  bool_array = std::static_pointer_cast<BooleanArray>(c->chunk(chunk));
         for (int64_t i = 0; i < bool_array->length(); i++)
             v_8.push_back(bool_array->Value(i));
 
@@ -881,9 +909,9 @@ void print_double(
 {
     VECT_DOUBLE &vd = *dict;
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
-        std::shared_ptr<arrow::DoubleArray> double_array = std::static_pointer_cast<DoubleArray> (c->data()->chunk(chunk));
+        std::shared_ptr<arrow::DoubleArray> double_array = std::static_pointer_cast<DoubleArray> (c->chunk(chunk));
         const DoubleArray::value_type * data0 = double_array->raw_values();
         vd.insert(vd.end(), data0, data0 + double_array->length());
     }
@@ -898,28 +926,28 @@ void from_pyarrow_array_std_chrono(
 {
     ARROW_TO_DB2_TIME t1;
     TimeUnit::type unit = TimeUnit::MILLI;;
-    std::string type = c->data()->type()->ToString();
+    std::string type = c->type()->ToString();
     std::shared_ptr<arrow::TimestampArray> ts_array;
 
-    if (type == "timestamp[ms]")
+    if (type.find ("timestamp[ms") != string::npos)
         unit = TimeUnit::MILLI;
-    else if (type == "timestamp[us]")
+    else if (type.find("timestamp[us") != string::npos)
         unit = TimeUnit::MICRO;
-    else if (type == "timestamp[s]")
+    else if (type.find("timestamp[s") != string::npos)
         unit = TimeUnit::SECOND;
-    else if (type == "timestamp[ns]")
+    else if (type.find("timestamp[ns") != string::npos)
         unit = TimeUnit::NANO;
     else
-        printf("error dont know what unit for timestamp %s\n", type.c_str());
+        LOG_INFO("Error, dont know what unit for timestamp'%s'\n", type.c_str());
 
     int64_t cont = 0;
 
     chrono::system_clock::time_point tp;
     Py_BEGIN_ALLOW_THREADS;
-    for (int chunk = 0; chunk < c->data()->num_chunks(); chunk++)
+    for (int chunk = 0; chunk < c->num_chunks(); chunk++)
     {
-
-        ts_array = std::static_pointer_cast<TimestampArray> (c->data()->chunk(chunk));
+        t1.clear();
+        ts_array = std::static_pointer_cast<TimestampArray> (c->chunk(chunk));
         for (int64_t i = 0; i < ts_array->length(); i++)
         {
             int64_t    v = ts_array->raw_values()[i];

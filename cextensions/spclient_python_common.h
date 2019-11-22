@@ -9,9 +9,6 @@
 #define SPCLIENT_PYTHON_VERSION "1.0.0"
 
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #include <stdlib.h>
 #include <sqlutil.h>
@@ -23,6 +20,11 @@ extern "C" {
 #include "win32_to_linux.h"
 
 #pragma push_macro("max")
+#ifndef SqlInfoPrint
+/* function used in DB2_API_CHECK */
+void SqlInfoPrint(const char *, struct sqlca * pSqlca, int, const char*);
+#endif
+
 #include "utilcli.h"
 #pragma pop_macro("max")
 
@@ -121,7 +123,7 @@ typedef struct {
 
 typedef struct _stmt_handle_struct {
     PyObject_HEAD
-    SQLHANDLE hdbc;
+    SQLHDBC hdbc;
     SQLHANDLE hstmt;
     long s_bin_mode;
     long cursor_type;
@@ -162,49 +164,62 @@ void print_mylog_info(const char * buffer_log);
 void print_mylog_info_format(const char * format, ...);
 
 int run_proc_send_csv_to_local_fs(
-    SQLHANDLE hdbc,
-    char * filename_in,
+    SQLHDBC hdbc,
+    const char* filename_in,
     SQLINTEGER len_filename,
-    char * csv_data,
-    int64_t file_size
+    SQLSMALLINT  chunk,
+    char* csv_data,
+    int64_t file_size,
+    ERROR_VAR_PARAM_DEF
 );
 
 int extract_array_one_big_csv(
-    SQLHANDLE henv,
-    SQLHANDLE hdbc,
+    //SQLHENV henv,
+    SQLHDBC hdbc,
     long      table,
     PYOBJ_PTR * py_out_open_int,
-    PYOBJ_PTR * py_out_root
+    PYOBJ_PTR * py_out_root,
+	ERROR_VAR_PARAM_DEF
 );
 
 
 int  display_parameters(
-    SQLHANDLE      hdbc,
-    SQLHANDLE      hstmt
+    SQLHDBC      hdbc,
+    SQLHSTMT      hstmt,
+    const char * table_name,
+    ERROR_VAR_PARAM_DEF
 );
 
 int display_columns(
-    SQLHANDLE      hdbc,
-    SQLHANDLE      hstmt,
+    SQLHDBC      hdbc,
+    SQLHSTMT      hstmt,
+    const char *   comment,
     bool           display,
-    PYOBJ_PTR      py_list_describe_cols
+    PYOBJ_PTR      py_list_describe_cols,
+    ERROR_VAR_PARAM_DEF
 );
 
 int setCLILoadMode(
-    SQLHANDLE, 
-    SQLHANDLE, 
+    SQLHSTMT, 
+    SQLHDBC, 
     int, 
-    db2LoadStruct*
+    db2LoadStruct*,
+    ERROR_VAR_PARAM_DEF
 );
 
 int load_c_example(
-    SQLHANDLE henv,
-    SQLHANDLE hdbc
+    SQLHDBC hdbc,
+    ERROR_VAR_PARAM_DEF
 );
 
 int run_the_test(
-    SQLHANDLE henv, 
-    SQLHANDLE hdbc
+    SQLHDBC hdbc,
+    ERROR_VAR_PARAM_DEF
+);
+
+int run_the_test_udfcli(
+    SQLHDBC hdbc,
+    ERROR_VAR_PARAM_DEF
 );
 // variables
 extern PYOBJ_PTR  mylog_info;
@@ -217,47 +232,176 @@ PYOBJ_PTR  python_sqlextendedstoreproc(PYOBJ_PTR  self, PYOBJ_PTR  args);
 PYOBJ_PTR  python_sample_tbload_c(PYOBJ_PTR  self, PYOBJ_PTR  args);
 PYOBJ_PTR  python_sample_tbload_c_cli(PYOBJ_PTR  self, PYOBJ_PTR  args);
 PYOBJ_PTR  python_arrow_table_to_db2(PYOBJ_PTR  self, PYOBJ_PTR  args);
-PYOBJ_PTR  python_extract_array(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_extract_doublearray(PYOBJ_PTR  self, PYOBJ_PTR  args);
 PYOBJ_PTR  python_describe_parameters(PYOBJ_PTR  self, PYOBJ_PTR  args);
 PYOBJ_PTR  python_describe_parameters_by_cli(PYOBJ_PTR  self, PYOBJ_PTR  args);
 PYOBJ_PTR  python_describe_columns(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_describe_procedure(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_describe_admin_cmd_procedure(PYOBJ_PTR  self, PYOBJ_PTR  args);
 PYOBJ_PTR  python_describe_columns_by_cli(PYOBJ_PTR  self, PYOBJ_PTR  args);
 PYOBJ_PTR  python_extract_array_into_python(PYOBJ_PTR  self, PYOBJ_PTR  args);
 PYOBJ_PTR  python_extract_array_one_big_csv(PYOBJ_PTR  self, PYOBJ_PTR  args);
-PYOBJ_PTR  python_send_file(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_call_sp_blob(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_call_sp_get_message_pipe1(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_send_file_to_local_fs(PYOBJ_PTR  self, PYOBJ_PTR  args);
 PYOBJ_PTR  python_run_the_test(PYOBJ_PTR  self, PYOBJ_PTR  args);
 PYOBJ_PTR  python_run_the_test_cli(PYOBJ_PTR  self, PYOBJ_PTR  args);
 PYOBJ_PTR  python_run_the_test_only_windows(PYOBJ_PTR  self, PYOBJ_PTR  args);
-PYOBJ_PTR  python_call_get_db_size(PYOBJ_PTR  self, PYOBJ_PTR  args);
-PYOBJ_PTR  python_call_get_db_size_with_timestamp(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_run_the_test_udfcli(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_get_db_size(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_get_db_size_with_timestamp(PYOBJ_PTR  self, PYOBJ_PTR  args);
 PYOBJ_PTR  python_create_dummy_exception(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_set_mylog(PYOBJ_PTR self, PYOBJ_PTR args);
+
+PYOBJ_PTR  python_update_dbcfg32(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_update_dbcfg64(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_update_dbcfg_string(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_monitor_load(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_snapshot_monitor(PYOBJ_PTR  self, PYOBJ_PTR  args);
+PYOBJ_PTR  python_get_dbcfg_string(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_get_dbcfg_int64(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_get_dbcfg_int32(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_get_dbcfg_int16(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_sqlectnd(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_get_node_directory(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_catalog_database(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_list_database_directory(PYOBJ_PTR self);
+PYOBJ_PTR  python_dbauthforcurrentuserdisplay(PYOBJ_PTR self);
+PYOBJ_PTR  python_backup(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_databaseupgrade(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_autoconfigure(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_SQLGetConnectAttrInt(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_SQLSetConnectAttrInt(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_SQLGetInfo(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_SQLGetInfoInt(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_SQLGetStmtAttrInt(PYOBJ_PTR self, PYOBJ_PTR args);
+PYOBJ_PTR  python_SQLSetStmtAttrInt(PYOBJ_PTR self, PYOBJ_PTR args);
 
 extern PyMethodDef spclient_python_Methods[];
 
-int extract_array(
-    SQLHANDLE henv,
-    SQLHANDLE hdbc);
+
+int get_dbcfg_string(
+    char* dbName,
+    char* buffer,
+    db2Uint32 token,
+    struct sqlca& sqlca);
+
+int get_dbcfg_int64(
+    char* dbName,
+    db2Uint64& buffer,
+    db2Uint32 token,
+    struct sqlca& sqlca);
+
+int get_dbcfg_int16(
+    char* dbName,
+    db2Uint16& buffer,
+    db2Uint32 token,
+    struct sqlca& sqlca);
+
+int get_dbcfg_int32(
+    char* dbName,
+    db2Uint32& buffer,
+    db2Uint32 token,
+    struct sqlca& sqlca);
+
+
+int update_dbcfg32(
+    char* dbAlias, 
+    db2Uint32 flags, 
+    db2Uint32 token, 
+    db2Uint32 ptrvalue,
+    struct sqlca &sqlca);
+
+int update_dbcfg64(
+    char* dbAlias, 
+    db2Uint32 flags, 
+    db2Uint32 token, 
+    db2Uint64 ptrvalue,
+    struct sqlca &sqlca );
+
+int update_dbcfg_string(
+    char* dbAlias,
+    db2Uint32 flags,
+    char* buffer,
+    db2Uint32 token,
+    struct sqlca &sqlca );
+
+int add_module_globals(PyObject* m);
+int add_module_globals_DBTN(PyObject* m);
+int add_sqlcli(PyObject* m);
+int add_sqlcli1(PyObject* m);
+int add_sqlext(PyObject* m);
+int add_sqlutil(PyObject* m);
+int add_monitor(PyObject* m);
+int add_sqlstate(PyObject* m);
+int add_module_globlas_backup(PyObject*);
+int add_module_globals_sqlcodes(PyObject* m);
+int add_module_globals_sqlenv(PyObject* m);
+
+int extract_doublearray(
+    //SQLHANDLE henv,
+    SQLHDBC hdbc,
+    ERROR_VAR_PARAM_DEF);
 
 int extract_array_phones(
-    SQLHANDLE henv,
-    SQLHANDLE hdbc);
+    //SQLHANDLE henv,
+    SQLHDBC hdbc,
+    ERROR_VAR_PARAM_DEF);
 
 int get_sqlextendedstoreproc(
-    SQLHANDLE henv,
-    SQLHANDLE hdbc);
+    SQLHDBC hdbc,
+    ERROR_VAR_PARAM_DEF);
 
 int get_db_size(
-    SQLHANDLE henv,
-    SQLHANDLE hdbc,
+    //SQLHANDLE henv,
+    SQLHDBC hdbc,
     SQLBIGINT    *out_DATABASESIZE,
     SQLBIGINT    *out_DATABASECAPACITY,
-    SQL_TIMESTAMP_STRUCT *out_snapshottimestamp
+    SQL_TIMESTAMP_STRUCT *out_snapshottimestamp,
+    ERROR_VAR_PARAM_DEF
 );
 
+int dumpDescriptors ( SQLCHAR *comment,         // display heading/comment
+                      SQLHDBC hdbc,
+                      SQLHSTMT hstmt,           // statement handle
+                      USHORT header,            // display header record
+                      USHORT records,           // display col/parm records
+                      int incBookmarkRec,
+                      ERROR_VAR_PARAM_DEF);      // include bookmark record
 
 
-#ifdef __cplusplus
+#define SPCLIENT_ERROR_MESSAGE if (ret != 0)\
+{\
+    int ret_set;\
+    ret_set = PyObject_SetAttrString(SpClientError, "errorMsg", Py_BuildValue("s", message));\
+    ret_set = PyObject_SetAttrString(SpClientError, "SQLCODE", PyLong_FromLong(sqlcode));\
+    ret_set = PyObject_SetAttrString(SpClientError, "SQLSTATE", Py_BuildValue("s", sqlstate));\
+    PyErr_Format(SpClientError, "something went wrong ret=%d %d %s()\nSQLCODE=%d\nSQLSTATE='%s'\nerrorMsg='%s'",\
+        ret,\
+        __LINE__,\
+        __FUNCTION__,\
+        sqlcode,\
+        sqlstate,\
+        message);\
+    return NULL;\
 }
-#endif
+
+
+#define SPCLIENT_ERROR { rc = sqlaintp(errorMsg, 1024, 80, &sqlca);\
+PyObject_SetAttrString(SpClientError, "errorMsg", Py_BuildValue("s", errorMsg));\
+PyObject_SetAttrString(SpClientError, "SQLCODE", PyLong_FromLong(sqlca.sqlcode));\
+char sqlstate [6] = {};\
+strncpy(sqlstate, sqlca.sqlstate, 5);\
+sqlstate[5] = 0;\
+PyObject_SetAttrString(SpClientError, "SQLSTATE", Py_BuildValue("s", sqlstate));\
+PyErr_Format(SpClientError, "something went wrong %d %d %s()\nSQLCODE=%d\nSQLSTATE='%s'\nerrorMsg='%s'",\
+    ret,\
+    __LINE__,\
+    __FUNCTION__,\
+    sqlca.sqlcode,\
+    sqlstate,\
+    errorMsg);\
+return NULL;}
+
 
 #endif

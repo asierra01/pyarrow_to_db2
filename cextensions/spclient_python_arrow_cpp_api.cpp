@@ -26,39 +26,33 @@ void load_pyarrow()
         if (ret != 0)
             printf("error arrow::py::import_pyarrow %d\n", ret);
         if (pyarrow == NULL)
-        {
             pyarrow = PyImport_ImportModule("pyarrow"); //New reference.
-            //printf("pyarrow         %p\n", pyarrow);
-        }
 
         if (pyarrow_parquet == NULL)
-        {
             pyarrow_parquet = PyImport_ImportModule("pyarrow.parquet"); //New reference.
-            //printf("pyarrow_parquet %p\n", pyarrow_parquet);
-        }
+
         numpy = PyImport_ImportModule("numpy");
         py_np = py11::reinterpret_borrow<py11::module>(numpy);
-        //print_mylog_info_format("all loaded");
     }
 
 }
 
-void print_column_name(COLUMN &c)
+void print_column_name(char * name)
 {
-    LOG_INFO("column name '%-16s' ", c->name().c_str());
+    LOG_INFO("column name '%-16s' ", name);
 
 }
 
-void print_column(COLUMN &c)
+void print_column(COLUMN &c, char * name)
 {
     LOG_INFO("column name '%-16s'  column data null_count %lld length %lld num_chunks %d type '%-15s' name '%-13s' id '%d'",
-        c->name().c_str(),
+        name,
         c->null_count(),
         c->length(),
-        c->data()->num_chunks(),
-        c->data()->type()->ToString().c_str(),
-        c->data()->type()->name().c_str(),
-        c->data()->type()->id());
+        c->num_chunks(),
+        c->type()->ToString().c_str(),
+        c->type()->name().c_str(),
+        c->type()->id());
 
 }
 
@@ -83,6 +77,7 @@ int using_arrow_cpp_api(
     for (int i = 0; i < parquet_table->num_columns(); i++)
     {
         c = parquet_table->column(i);
+        string column_name = parquet_table->ColumnNames()[i];
         //if (log)
         //    print_column(c);
         //if (log)
@@ -90,12 +85,15 @@ int using_arrow_cpp_api(
         try
         {
             MY_DICT * dict = new MY_DICT(
-                c->data()->type()->id(), 
-                c->name(),
-                c->data()->type()->ToString());
-            map_field_memory_vectors[c->name().c_str()] = dict;
+                c->type()->id(), 
+                column_name,
+                c->type()->ToString());
+            map_field_memory_vectors[column_name.c_str()] = dict;
 
-            switch (c->data()->type()->id())
+            //if (log)
+            //    LOG_INFO("column type '%s'", c->data()->type()->ToString().c_str());
+
+            switch (c->type()->id())
             {
                 case arrow::Type::INT64:
                 {
@@ -208,20 +206,24 @@ int using_arrow_cpp_api(
                     print_mylog_info_format("%d %s() unknow type %d '%s'", 
                         __LINE__,
                         __FUNCTION__,
-                        c->data()->type()->id(),
-                        my_dict_arrow()[c->data()->type()->id()].c_str());
+                        c->type()->id(),
+                        my_dict_arrow()[c->type()->id()].c_str());
                     return -1;
 
                 }
 
             }
-            LOG_DICT;
+            log_dic(*dict, c, py_table, __LINE__, __FUNCTION__);
+
             //printf("dict size %zd\n", dict->size());
         }
         catch (py11::error_already_set &e)
         {
             char buffer[500];
-            snprintf(buffer, 500, "error_already_set  '%s'\n", e.what());
+            snprintf(buffer, 500, "%d %s() error_already_set  '%s'\n",
+                     __LINE__,
+                     __FUNCTION__,
+                     e.what());
             LOG_INFO("%s", buffer);
             return -1;
         }

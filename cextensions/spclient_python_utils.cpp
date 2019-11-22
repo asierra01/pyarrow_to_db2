@@ -3,9 +3,7 @@
 
 using namespace py11::literals;
 
-
-
-void print_dir(py11::object _object)
+void print_dir(py11::object &_object)
 {
     std::string code = R"(
 def print_py(py):
@@ -14,7 +12,7 @@ def print_py(py):
     try
     {
         py11::exec(code.c_str());
-        py11::globals()["print_py"](_object);
+        py11::object ret = py11::globals()["print_py"](_object);
     }
     catch (py11::error_already_set & e)
     {
@@ -72,10 +70,11 @@ const char* __doc__(PyCFunction func)
 }
 /* turn the CLI LOAD feature ON or OFF */
 int setCLILoadMode(
-    SQLHANDLE hstmt,
-    SQLHANDLE hdbc,
+    SQLHSTMT hstmt,
+    SQLHDBC hdbc,
     int fStartLoad,
-    db2LoadStruct *pLoadStruct)
+    db2LoadStruct *pLoadStruct,
+    ERROR_VAR_PARAM_DEF)
 {
     int rc = 0;
     SQLRETURN cliRC = SQL_SUCCESS;
@@ -98,16 +97,16 @@ int setCLILoadMode(
     if (fStartLoad)
     {
 
-/*
+    /*
         
-   Use load values.
+       Use load values.
 
-SQL_USE_LOAD_OFF                  0
-SQL_USE_LOAD_INSERT               1
-SQL_USE_LOAD_REPLACE              2
-SQL_USE_LOAD_RESTART              3
-SQL_USE_LOAD_TERMINATE            4
-*/
+    SQL_USE_LOAD_OFF                  0
+    SQL_USE_LOAD_INSERT               1
+    SQL_USE_LOAD_REPLACE              2
+    SQL_USE_LOAD_RESTART              3
+    SQL_USE_LOAD_TERMINATE            4
+    */
         cliRC = SQLSetStmtAttr(hstmt,
                                SQL_ATTR_USE_LOAD_API,
                                (SQLPOINTER)SQL_USE_LOAD_INSERT,
@@ -122,10 +121,10 @@ SQL_USE_LOAD_TERMINATE            4
         */
         STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
         Py_BEGIN_ALLOW_THREADS
-            cliRC = SQLSetStmtAttr(hstmt,
-                                   SQL_ATTR_LOAD_INFO,
-                                   (SQLPOINTER)pLoadStruct,
-                                   0);
+        cliRC = SQLSetStmtAttr(hstmt,
+                               SQL_ATTR_LOAD_INFO,
+                               (SQLPOINTER)pLoadStruct,
+                               0);
         Py_END_ALLOW_THREADS
         STMT_HANDLE_CHECK(hstmt, hdbc, cliRC);
     }

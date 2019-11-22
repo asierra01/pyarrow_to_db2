@@ -9,7 +9,7 @@
 #include "arrow_table_to_db2_dict.h"
 
 
-typedef std::shared_ptr<arrow::Column> COLUMN;
+typedef std::shared_ptr<arrow::ChunkedArray> COLUMN;
 typedef std::shared_ptr<arrow::Table> TABLE;
 
 #define MAX_DIGITS 40
@@ -30,12 +30,15 @@ int create_table_in_backend_from_map_fieldname(
     const char * table_name,
     bool         column_oriented,
     bool         drop_table,
-    bool         &column_organyze_by,
-    bool         &column_boolean);
+    bool         create_table,
+    bool         &column_organize_by,
+    bool         &column_boolean,
+    ERROR_VAR_PARAM_DEF);
 
 int do_the_load_arrow(
     SQLHANDLE henv,
     SQLHANDLE hdbc,
+    SQLHANDLE &hstmt,
     MAP_FIELDNAME_DICT &map_field_memory_vectors,
     const char * tablespace_name,
     const char * schema_name,
@@ -47,8 +50,10 @@ int do_the_load_arrow(
     db2Uint32  iChunkSize,
     bool         column_oriented,
     bool         drop_table,
+    bool         create_table,
     db2LoadOut * pLoadOut,
-    int64_t     num_rows);
+    int64_t     num_rows,
+    ERROR_VAR_PARAM_DEF);
 
 
 MAP_ARROWTYPE_STRING &my_dict_arrow();
@@ -91,15 +96,17 @@ void log_mapfieldname_dict(
 int boost_tokenize_and_run_sql(
     SQLHANDLE hdbc,
     SQLHANDLE hstmt,
-    std::string &s);
+    std::string &s,
+    ERROR_VAR_PARAM_DEF);
 
-int  bind_parameters_generic(
+int  bind_parameters(
     SQLHANDLE hdbc,
     SQLHANDLE hstmt,
     int64_t num_rows,
     MAP_FIELDNAME_DICT &map_field_memory_vectors,
     MAP_COLNO_COLUMN_INFO& map_column_info,
-    bool &column_boolean);
+    bool &column_boolean,
+    ERROR_VAR_PARAM_DEF);
 
 void free_MAP_FIELDNAME_DICT(
     MAP_FIELDNAME_DICT &map_field_memory_vectors);
@@ -109,4 +116,4 @@ void tm_toTIME(
     std::tm tm, 
     ARROW_TO_DB2_TIME &t1);
 
-void print_dir(py11::object _object);
+void print_dir(py11::object &_object);
